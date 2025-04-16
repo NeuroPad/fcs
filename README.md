@@ -1,6 +1,3 @@
-Here’s the updated `README.md` tailored for your **FCS (Fischman-Gardener Cognitive System)** while keeping the core structure and instructions intact:
-
----
 
 # FCS: Fischman-Gardener Cognitive System (GraphRAG-Based)
 
