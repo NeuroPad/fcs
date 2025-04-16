@@ -1,0 +1,102 @@
+.tip-content {
+  padding: 16px;
+}
+
+.description {
+  color: #333;
+  line-height: 1.6;
+  margin-bottom: 24px;
+  font-size: 15px;
+}
+
+.section {
+  margin-bottom: 24px;
+  background: #f8f8f8;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.section h3 {
+  color: #2F5A31;
+  font-size: 16px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.section ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.section li {
+  padding: 8px 0;
+  padding-left: 24px;
+  position: relative;
+  color: #666;
+  line-height: 1.4;
+  border-bottom: 1px solid #eee;
+}
+
+.section li:last-child {
+  border-bottom: none;
+}
+
+.section li:before {
+  content: "•";
+  color: #2F5A31;
+  position: absolute;
+  left: 8px;
+}
+
+.warning li:before {
+  content: "!";
+  color: #ff6b6b;
+}
+
+.dosage {
+  background: #e8f5e9;
+}
+
+.dosage p {
+  color: #2F5A31;
+  font-weight: 500;
+}
+
+/* List Items */
+ion-item {
+  --padding-start: 16px;
+  --padding-end: 16px;
+  --padding-top: 12px;
+  --padding-bottom: 12px;
+}
+
+ion-item h2 {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+ion-item p {
+  font-size: 14px;
+  color: #666;
+}
+
+ion-icon {
+  font-size: 24px;
+}
+
+/* Segment Control */
+ion-segment {
+  padding: 12px;
+}
+
+ion-segment-button {
+  --color: #666;
+  --color-checked: #2F5A31;
+  --indicator-color: #2F5A31;
+}
+
+ion-list {
+  margin-top: 8px;
+}

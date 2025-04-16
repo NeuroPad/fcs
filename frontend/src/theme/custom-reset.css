@@ -1,0 +1,129 @@
+/* override global styles */
+* {
+  font-family: var(--ion-font-family);
+  user-select: none;
+}
+
+/* h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  padding: 0;
+  margin: 0;
+} */
+
+.ion-button-reset {
+  height: 50px;
+  font-weight: 600;
+  text-transform: none;
+}
+
+ion-button {
+  --text-transform: capitalize !important;
+  --box-shadow: none;
+}
+
+ion-split-pane {
+  --side-width: 350px;
+  --side-max-width: 350px;
+}
+
+/* global swiper style */
+
+.swiper-pagination-bullet {
+  width: 0.8rem !important;
+  height: 0.8rem !important;
+  background-color: #ffffff !important;
+  border: 1px solid var(--ion-color-primary) !important;
+  opacity: 1 !important;
+}
+
+.swiper-pagination-bullet-active {
+  background-color: var(--ion-color-primary) !important;
+  border: 1px solid var(--ion-color-primary) !important;
+}
+
+.swiper-pagination-bullet-inactive {
+  opacity: 1 !important;
+  background-color: #ffffff !important;
+  border: 1px solid var(--ion-color-primary) !important;
+}
+
+/* remove searchbar shadow */
+.searchbar-input {
+  box-shadow: none !important;
+}
+
+.custom-input-wrapper {
+  margin-bottom: 15px;
+  position: relative;
+}
+
+.custom-input {
+  border: 2px solid #ebebeb;
+  background-color: transparent;
+  padding: 10px 20px;
+  border-radius: 10px;
+  width: 100%;
+  outline: none;
+}
+
+.custom-input:focus {
+  border-color: #0D986A;
+}
+
+.custom-input-error {
+  font-size: 12px;
+  color: var(--ion-color-danger);
+  font-weight: 600;
+  padding: 0;
+  margin: 0;
+  margin-top: 5px;
+}
+
+.card-btn {
+  --background: #0D986A;
+}
+
+@media (min-width: 990px) {
+  .ion-modal {
+    --min-width: 800px;
+    --height: auto;
+  }
+
+  .ion-modal-cal {
+    --width: 300px;
+    --height: auto;
+  }
+}
+
+table {
+  width: 100%;
+}
+
+table,
+th,
+td {
+  border: 1px dashed #49454f !important;
+  border-collapse: collapse !important;
+  font-size: 12px !important;
+  padding: 15px !important;
+}
+
+table th {
+  text-align: left;
+}
+
+.form-container {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+  margin-bottom: 20px;
+}

@@ -1,0 +1,79 @@
+.onboarding-swiper {
+  height: 100%;
+  background-color: #F3EEE9;
+}
+
+.slide-content {
+  padding: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.image-container {
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin: 40px auto;
+  background-color: #fff;
+}
+
+.image-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.text-content {
+  margin-top: 40px;
+  padding: 0 20px;
+}
+
+.text-content h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  margin-bottom: 16px;
+}
+
+.text-content p {
+  font-size: 16px;
+  color: #666;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0 20px;
+}
+
+.get-started-button {
+  margin-top: 40px;
+  width: calc(100% - 40px);
+  max-width: 320px;
+  --background: var(--ion-color-primary);;
+  --border-radius: 8px;
+  --padding-top: 16px;
+  --padding-bottom: 16px;
+  font-weight: 600;
+}
+
+.next-button {
+  margin-top: 40px;
+  --color: var(--ion-color-primary);;
+  font-weight: 600;
+}
+
+/* Pagination styles */
+:root {
+  --swiper-pagination-color: var(--ion-color-primary);;
+  --swiper-pagination-bullet-inactive-color: #ccc;
+  --swiper-pagination-bullet-inactive-opacity: 1;
+}
+
+.swiper-pagination-bullet {
+  width: 8px;
+  height: 8px;
+  margin: 0 4px !important;
+}

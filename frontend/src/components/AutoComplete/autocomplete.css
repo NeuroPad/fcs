@@ -1,0 +1,38 @@
+ion-searchbar.custom {
+  /* --background: #19422d; */
+  --color: #b3b3b3;
+  --placeholder-color: #b3b3b3;
+  --icon-color: #b3b3b3;
+  --clear-button-color:#EB445A;
+
+  --border-radius: 4px;
+  border: 1px solid #b3b3b3;
+  border-radius: 4px;
+}
+
+ion-searchbar.custom:hover {
+  /* --background: #19422d; */
+  --color: #4F5DE4;
+  --placeholder-color: #4F5DE4;
+  --icon-color: #4F5DE4;
+  --clear-button-color:#EB445A;
+
+  --border-radius: 4px;
+  border: 1px solid #4F5DE4;
+  border-radius: 4px;
+}
+
+ion-searchbar.ios.custom {
+  --cancel-button-color: #EB445A;
+}
+
+ion-searchbar.md.custom {
+  --cancel-button-color: #EB445A;
+}
+
+ion-select{
+  border-width: #EB445A;;
+  border-style: none;
+  border-color: #EB445A;
+}
+

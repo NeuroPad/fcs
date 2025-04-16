@@ -1,0 +1,7 @@
+{
+  "name": "NatureMed",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "react"
+}

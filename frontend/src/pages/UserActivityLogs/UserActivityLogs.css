@@ -1,0 +1,68 @@
+.user-logs-container {
+  padding: 16px;
+}
+
+.user-info-card {
+  margin-bottom: 20px;
+  background: linear-gradient(to right, var(--ion-color-primary), var(--ion-color-primary-shade));
+  color: white;
+}
+
+.user-info-card h2 {
+  margin: 0;
+  font-size: 1.5em;
+  font-weight: bold;
+}
+
+.user-info-card p {
+  margin: 4px 0;
+  opacity: 0.9;
+}
+
+.user-icon {
+  font-size: 3em;
+  margin-right: 16px;
+}
+
+.filters-card {
+  margin-bottom: 20px;
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.action-chip {
+  font-weight: 500;
+  padding: 8px 12px;
+}
+
+/* DataTable customizations */
+.rdt_TableHeader {
+  background-color: var(--ion-color-light);
+}
+
+.rdt_TableRow:hover {
+  background-color: var(--ion-color-light-shade);
+  cursor: pointer;
+}
+
+/* Ion Badge customizations */
+ion-badge {
+  padding: 8px 12px;
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  .table-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .table-header ion-button {
+    width: 100%;
+  }
+}

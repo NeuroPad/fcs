@@ -1,0 +1,152 @@
+.homesection {
+  padding: 16px;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+/* Menu Cards */
+.menu-col {
+  padding: 6px;
+}
+
+.menu-item {
+  background: #f8f8f8;
+  border-radius: 16px;
+  padding: 16px;
+  height: 140px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.menu-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #000;
+  margin: 0 0 4px 0;
+  position: relative;
+  z-index: 1;
+}
+
+.menu-subtitle {
+  font-size: 13px;
+  color: #666;
+  margin: 0;
+  line-height: 1.4;
+  max-width: 70%;
+  position: relative;
+  z-index: 1;
+}
+
+.menu-icon {
+  position: absolute;
+  bottom: -80px;
+  right: -60px;
+  width: 160px;
+  height: 160px;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* Grid adjustments */
+ion-col {
+  --ion-grid-column-padding: 6px;
+}
+
+ion-row {
+  margin: 0 -6px;
+}
+
+/* Popular Plants Section */
+.popular-plants-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.popular-plants {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+}
+
+.plant-card {
+  flex: 0 0 160px;
+  background: #f9f9f9;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.plant-info {
+  margin-bottom: 8px;
+}
+
+
+.plant-image {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.search-results {
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.rag-response {
+  background: var(--ion-color-light);
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.rag-response h2 {
+  color: var(--ion-color-dark);
+  margin-bottom: 12px;
+}
+
+.similar-images {
+  margin-top: 24px;
+}
+
+.similar-images h2 {
+  color: var(--ion-color-dark);
+  margin-bottom: 16px;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  padding: 8px;
+}
+
+.similar-image-item {
+  background: var(--ion-color-light);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.similar-image-item img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.similarity-score {
+  padding: 8px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--ion-color-medium);
+  background: var(--ion-color-light);
+}

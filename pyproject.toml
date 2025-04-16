@@ -1,0 +1,53 @@
+[tool.poetry]
+name = "memduo-remake"
+version = "0.1.0"
+description = "A FastAPI project for Graph-based RAG"
+authors = ["Adebisi Joseph <adebisijoe@gmail.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12"
+fastapi = "^0.115.6"
+uvicorn = "^0.34.0"
+python-multipart = "^0.0.20"
+langchain = "^0.3.13"
+langchain-openai = "^0.2.14"
+langchain-experimental = "^0.3.4"
+langchain-community = "^0.3.13"
+langchain-neo4j = "^0.2.0"
+neo4j = "^5.27.0"
+scipy = "^1.12.0"
+llama-index = "^0.12.8"
+graspologic = "3.4.1"
+networkx = "^3.4.2"
+pydantic = "^2.10.4"
+python-dotenv = "^1.0.1"
+pypdf = "^5.1.0"
+PyPDF2= "^3.0.1"
+pdfreader = "^0.1.15"
+llama-index-graph-stores-neo4j = "^0.4.4"
+future = "^1.0.0"
+certifi = "^2024.12.14"
+urllib3 = "^2.3.0"
+pip-system-certs = "^4.0"
+llama-index-vector-stores-chroma = "^0.4.1"
+sqlalchemy = "^2.0.37"
+llama-index-embeddings-huggingface = "^0.5.1"
+llama-index-embeddings-instructor = "^0.3.0"
+llama-index-llms-ollama = "^0.5.0"
+docling = "^2.25.2"
+docling-core = "^2.21.2"
+llama-index-embeddings-clip = "^0.3.1"
+fastcoref = "^2.1.6"
+# Add relik and its extractors
+relik = { git = "https://github.com/AdebisiJoe/relik.git", branch = "main" }
+llama-index-extractors-relik = "^0.3.1"
+pyvis = "^0.3.2"
+setuptools = "^78.1.0"
+clip = {git = "https://github.com/openai/CLIP.git"}
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

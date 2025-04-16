@@ -1,0 +1,133 @@
+.chat-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.chat-interface-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--ion-background-color);
+}
+
+.chat-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages-container {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.chat-message {
+  max-width: 70%;
+  margin: 8px 0;
+  padding: 12px 20px;
+  border-radius: 20px;
+  position: relative;
+  display: inline-block;
+  clear: both;
+  word-wrap: break-word;
+}
+
+.chat-message.user {
+  background-color:  var(--ion-color-primary);
+  color: #fff;
+  border-top-right-radius: 0;
+  align-self: flex-end;
+  margin-left: auto;
+}
+
+.chat-message.assistant {
+  background-color: #5661F6;
+  color: #fff;
+  border-top-left-radius: 0;
+  align-self: flex-start;
+  margin-right: auto;
+}
+
+.typing-indicator {
+  max-width: 70%;
+  margin: 8px 0;
+  padding: 12px 20px;
+  border-radius: 20px;
+  position: relative;
+  display: inline-block;
+  background-color: #5661F6;
+  color: #fff;
+  border-top-left-radius: 0;
+  align-self: flex-start;
+  margin-right: auto;
+}
+
+.chat-input-container {
+  padding: 16px;
+  background: var(--ion-background-color);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  bottom: 0;
+}
+
+.input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: #f5f5f5;
+  border-radius: 50px;
+  padding: 8px 16px;
+  gap: 12px;
+}
+
+.brain-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.chat-input {
+  --padding-start: 0;
+  --padding-end: 16px;
+  --padding-top: 8px;
+  --padding-bottom: 8px;
+  --placeholder-color: #666;
+  --placeholder-opacity: 0.8;
+}
+
+.send-button {
+  --padding-start: 12px;
+  --padding-end: 12px;
+  --border-radius: 50%;
+  margin: 0;
+  width: 40px;
+  height: 40px;
+  --background:  var(--ion-color-primary);
+}
+
+.send-button ion-icon {
+  font-size: 20px;
+  color: #fff;
+}
+.chat-input-container ion-input {
+  flex: 1;
+  margin-right: 8px;
+  --padding-start: 16px;
+  --padding-end: 16px;
+  --padding-top: 8px;
+  --padding-bottom: 8px;
+  --placeholder-color: rgba(0, 0, 0, 0.5);
+}
+
+.chat-input-container ion-button {
+  --padding-start: 12px;
+  --padding-end: 12px;
+  --border-radius: 50%;
+  margin: 0;
+}

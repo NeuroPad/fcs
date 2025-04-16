@@ -1,0 +1,48 @@
+.table-view-container {
+  margin-top: 16px;
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+.relationship-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.relationship-table th {
+  background-color: #f5f5f5;
+  padding: 10px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 1px solid #ddd;
+}
+
+.relationship-table td {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  color: #555;
+}
+
+.relationship-table tr:hover {
+  background-color: #f9f9f9;
+}
+
+.table-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  width: 100%;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #eaeaea;
+  color: #666;
+  font-size: 16px;
+  text-align: center;
+  padding: 20px;
+  margin-top: 16px;
+}
