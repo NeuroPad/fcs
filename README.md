@@ -1,52 +1,64 @@
-# GraphRAG FastAPI Project
+Here’s the updated `README.md` tailored for your **FCS (Fischman-Gardener Cognitive System)** while keeping the core structure and instructions intact:
 
-A FastAPI-based implementation of Graph-based Retrieval Augmented Generation (GRAPH RAG) using Neo4j, LangChain, and LlamaIndex.
+---
 
-## Features
+# FCS: Fischman-Gardener Cognitive System (GraphRAG-Based)
 
-- **Multimodal Document Processing**  
-  - PDF and TXT file support  
-  - Image extraction and indexing  
-  - Markdown conversion  
-- **Advanced GRAPH RAG Implementation**  
-  - LangChain integration  
-  - LlamaIndex integration  
-  - Neo4j Graph Database backend  
-- **Comprehensive API Features**  
-  - File management endpoints  
-  - Document processing  
-- **Interactive Frontend**  
-  - Real-time chat interface  
-  - File upload support  
-  - Session management  
+A FastAPI-powered system implementing **Graph-based Retrieval-Augmented Generation (GRAPH RAG)** with an architecture inspired by the **Fischman-Gardener Model** of continuous human-AI co-evolution. This project combines **Neo4j**, **LangChain**, and **LlamaIndex** to deliver adaptive intelligence through dynamic graph reasoning.
 
-## Prerequisites
+## 🔍 Features
 
-- Python 3.9 or higher
-- Poetry for dependency management
-- Neo4j database instance
-- OpenAI API key
-- Node.js 14 or higher
+- **Multimodal Document Understanding**  
+  - PDF and TXT file ingestion  
+  - Image extraction & semantic linking  
+  - Markdown & structured text conversion  
+
+- **FGM-Inspired GRAPH RAG Architecture**  
+  - Integration with LangChain for contextual reasoning  
+  - LlamaIndex for document embeddings  
+  - Neo4j as the fluid knowledge graph backend  
+
+- **Interactive Co-Adaptive API**  
+  - File upload & session-based document memory  
+  - Real-time chat for co-evolving knowledge interactions  
+  - Confidence-preserving querying using graph insights  
+
+- **User Interface for Exploration**  
+  - Conversational frontend mimicking bidirectional adaptation  
+  - Semantic file exploration  
+  - Live graph session support
+
+## ⚙️ Prerequisites
+
+- Python 3.9 or higher  
+- [Poetry](https://python-poetry.org/) for dependency management  
+- Running Neo4j instance (AuraDB or self-hosted)  
+- OpenAI API key  
+- Node.js 14+  
 - npm or yarn
 
-## Installation and Setup
+## 🚀 Installation & Setup
 
 ### Backend Setup
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/AdebisiJoe/multimodal-graphrag-api.git
-   cd multimodal-graphrag-api
+   git clone https://github.com/fischmanb/fcs.git
+   cd fcs
    ```
+
 2. **Install Poetry:**
    ```bash
    curl -sSL https://install.python-poetry.org | python3 -
    ```
+
 3. **Install backend dependencies:**
    ```bash
    poetry install
    ```
-4. **Create a `.env` file in the root directory:**
+
+4. **Configure your environment:**
+   Create a `.env` file with your credentials:
    ```env
    OPENAI_API_KEY=your_openai_api_key
    NEO4J_URI=your_neo4j_uri
@@ -56,48 +68,55 @@ A FastAPI-based implementation of Graph-based Retrieval Augmented Generation (GR
 
 ### Frontend Setup
 
-1. **Navigate to the frontend directory:**
+1. **Navigate to the frontend:**
    ```bash
    cd frontend
    ```
+
 2. **Install frontend dependencies:**
    ```bash
-   npm install  # or using yarn: yarn install
+   npm install  # or yarn install
    ```
 
-## Running the Application
+## 🧠 Running FCS Locally
 
-### Start the Backend
+### Start the Backend (Graph & AI Brain)
 
-1. **Activate the Poetry environment:**
+1. **Activate Poetry environment:**
    ```bash
    poetry shell
    ```
-2. **Start the FastAPI server:**
+
+2. **Launch FastAPI server:**
    ```bash
    uvicorn main:app --reload --loop=asyncio
    ```
-3. **The backend will be available at:**
-   - API: [http://localhost:8000](http://localhost:8000)
-   - Documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
-   - Alternative docs: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
-### Start the Frontend
+3. **Access backend at:**
+   - API Root: [http://localhost:8000](http://localhost:8000)
+   - Swagger Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+   - ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
-1. **Navigate to the frontend directory (if not already there):**
+### Start the Frontend (Human-AI Interaction Surface)
+
+1. **If not already in frontend directory:**
    ```bash
    cd frontend
    ```
-2. **Start the development server:**
+
+2. **Run the development server:**
    ```bash
-   npm run start  # or using yarn: yarn start
+   npm start  # or yarn start
    ```
-3. **The frontend will be available at:**  
+
+3. **Access the interface at:**  
    - [http://localhost:3000](http://localhost:3000)
 
-## API Endpoints
+## 🛠 API Overview
 
-More endpoints and their descriptions can be found in the API documentation.
+All endpoints for document ingestion, processing, and chat interaction are documented at `/docs`. These are designed to support:
 
-
+- Real-time file and node management  
+- Adaptive conversation with memory context  
+- Retrieval-augmented answers from graph-based knowledge
 
