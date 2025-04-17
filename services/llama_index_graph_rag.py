@@ -114,21 +114,21 @@ class GraphRAGService:
         hf_model_name = "BAAI/bge-small-en-v1.5"
         hf_model_path = settings.MODELS_DIR / "bge-small-en-v1.5"
         
-        if hf_model_path.exists():
-            self.embed_model = HuggingFaceEmbedding(
-                model_name=str(hf_model_path),
-                cache_folder=str(settings.MODELS_DIR)
-            )
-        else:
-            # Fallback to downloading if not found locally
-            self.embed_model = HuggingFaceEmbedding(
-                model_name=hf_model_name,
-                cache_folder=str(settings.MODELS_DIR)
-            )
+        # if hf_model_path.exists():
+        #     self.embed_model = HuggingFaceEmbedding(
+        #         model_name=str(hf_model_path),
+        #         cache_folder=str(settings.MODELS_DIR)
+        #     )
+        # else:
+        #     # Fallback to downloading if not found locally
+        #     self.embed_model = HuggingFaceEmbedding(
+        #         model_name=hf_model_name,
+        #         cache_folder=str(settings.MODELS_DIR)
+        #     )
         #self.llm = Ollama(model="command-r7b", request_timeout=1200)
         
         # Initialize Open Ai models
-        #self.embed_model = OpenAIEmbedding(model_name="text-embedding-ada-002")
+        self.embed_model = OpenAIEmbedding(model_name="text-embedding-ada-002")
         self.llm = OpenAI(api_key=settings.OPENAI_API_KEY, model="gpt-4o-mini")
         
         # Initialize graph stores

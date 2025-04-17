@@ -31,27 +31,36 @@ COPY . /app/
 # Create models directory
 RUN mkdir -p /app/models
 
-# Download and setup models with retry mechanism
-RUN for i in 1 2 3; do \
-        python -m spacy download en_core_web_lg && \
-        python -c "import spacy; import os; os.symlink(spacy.util.get_package_path('en_core_web_lg'), '/app/models/en_core_web_lg')" && \
-        break || \
-        echo "Retry downloading spaCy model: $i" && \
-        sleep 10; \
-    done
+# Download and setup models with retry mechanism and existence check
+RUN if [ ! -d "/app/models/en_core_web_lg" ]; then \
+        for i in 1 2 3; do \
+            python -m spacy download en_core_web_lg && \
+            python -c "import spacy; import os; os.symlink(spacy.util.get_package_path('en_core_web_lg'), '/app/models/en_core_web_lg')" && \
+            break || \
+            echo "Retry downloading spaCy model: $i" && \
+            sleep 10; \
+        done; \
+    else \
+        echo "SpaCy model already exists, skipping download"; \
+    fi
 
-# Download Hugging Face models with retry mechanism
-RUN for i in 1 2 3; do \
-        python -c "from huggingface_hub import snapshot_download; \
-        snapshot_download(repo_id='BAAI/bge-small-en-v1.5', local_dir='/app/models/bge-small-en-v1.5', local_dir_use_symlinks=False); \
-        snapshot_download(repo_id='relik-ie/relik-relation-extraction-small', local_dir='/app/models/relik-relation-extraction-small', local_dir_use_symlinks=False)" && \
-        break || \
-        echo "Retry downloading Hugging Face models: $i" && \
-        sleep 10; \
-    done
+# Download Hugging Face models with retry mechanism and existence check
+RUN if [ ! -d "/app/models/bge-small-en-v1.5" ] || [ ! -d "/app/models/relik-relation-extraction-small" ]; then \
+        for i in 1 2 3; do \
+            python -c "from huggingface_hub import snapshot_download; \
+            snapshot_download(repo_id='BAAI/bge-small-en-v1.5', local_dir='/app/models/bge-small-en-v1.5', local_dir_use_symlinks=False); \
+            snapshot_download(repo_id='relik-ie/relik-relation-extraction-small', local_dir='/app/models/relik-relation-extraction-small', local_dir_use_symlinks=False)" && \
+            break || \
+            echo "Retry downloading Hugging Face models: $i" && \
+            sleep 10; \
+        done; \
+    else \
+        echo "All Hugging Face models already exist, skipping download"; \
+    fi
 
 # Install CLIP using Poetry with retry mechanism
-RUN for i in 1 2 3; do \
+RUN poetry run python -c "import clip" || \
+    for i in 1 2 3; do \
         poetry add git+https://github.com/openai/CLIP.git && \
         break || \
         echo "Retry installing CLIP: $i" && \
