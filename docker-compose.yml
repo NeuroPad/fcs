@@ -16,6 +16,8 @@ services:
     volumes:
       - .:/app
       - ./markdown:/app/markdown
+      # Persist models directory to avoid re-downloading on every rebuild
+      - models_data:/app/models
     networks:
       - app-network
 
@@ -31,3 +33,7 @@ services:
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  models_data:
+    # Named volume for persisting downloaded models

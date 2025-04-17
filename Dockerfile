@@ -1,41 +1,65 @@
 FROM python:3.11-slim
 
-# Fix package installation issues and install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-
-# Add Cargo to PATH
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-# Set pip timeout and retries
-ENV PIP_DEFAULT_TIMEOUT=300
-ENV PIP_RETRIES=10
-
-# Install Poetry with increased timeout
-RUN pip install --timeout 300 poetry==1.8.4
-
-# Set working directory
 WORKDIR /app
 
-# Copy only dependencies first
-COPY pyproject.toml poetry.lock ./
+# Install system dependencies including build tools
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    build-essential \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies with retry mechanism
-RUN poetry config virtualenvs.create false && \
-    for i in $(seq 1 3); do \
+# Copy requirements first for better caching
+COPY pyproject.toml poetry.lock* /app/
+
+# Install Poetry using pip instead of the installer script
+RUN pip install poetry==2.1.2 && \
+    poetry --version
+
+# Install dependencies with retry mechanism
+RUN for i in 1 2 3; do \
+        poetry config virtualenvs.create false && \
         poetry install --no-interaction --no-ansi && break || \
-        if [ $i -lt 3 ]; then \
-            echo "Retry $i of 3..." && \
-            sleep 5; \
-        else \
-            exit 1; \
-        fi \
+        echo "Retry installing dependencies: $i" && \
+        sleep 10; \
     done
 
-# Copy application
-COPY . .
+# Copy the rest of the application
+COPY . /app/
 
-# Run command with --loop=asyncio
+# Create models directory
+RUN mkdir -p /app/models
+
+# Download and setup models with retry mechanism
+RUN for i in 1 2 3; do \
+        python -m spacy download en_core_web_lg && \
+        python -c "import spacy; import os; os.symlink(spacy.util.get_package_path('en_core_web_lg'), '/app/models/en_core_web_lg')" && \
+        break || \
+        echo "Retry downloading spaCy model: $i" && \
+        sleep 10; \
+    done
+
+# Download Hugging Face models with retry mechanism
+RUN for i in 1 2 3; do \
+        python -c "from huggingface_hub import snapshot_download; \
+        snapshot_download(repo_id='BAAI/bge-small-en-v1.5', local_dir='/app/models/bge-small-en-v1.5', local_dir_use_symlinks=False); \
+        snapshot_download(repo_id='relik-ie/relik-relation-extraction-small', local_dir='/app/models/relik-relation-extraction-small', local_dir_use_symlinks=False)" && \
+        break || \
+        echo "Retry downloading Hugging Face models: $i" && \
+        sleep 10; \
+    done
+
+# Install CLIP using Poetry with retry mechanism
+RUN for i in 1 2 3; do \
+        poetry add git+https://github.com/openai/CLIP.git && \
+        break || \
+        echo "Retry installing CLIP: $i" && \
+        sleep 10; \
+    done
+
+# Expose the port the app runs on
+EXPOSE 8000
+
+# Command to run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "asyncio"]
