@@ -103,7 +103,7 @@ const Chat: React.FC = () => {
 
   return (
     <IonPage>
-      <Header title="Memduo Chat" />
+      <Header title="fcs Chat" />
       <div className="chat-layout">
         <div className="chat-interface-container">
           <ModeSelector />

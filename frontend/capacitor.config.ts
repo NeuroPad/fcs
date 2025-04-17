@@ -1,8 +1,8 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.memduo.app',
-  appName: 'memduo',
+  appId: 'com.fcs.app',
+  appName: 'fcs',
   webDir: 'build',
   bundledWebRuntime: false,
 };

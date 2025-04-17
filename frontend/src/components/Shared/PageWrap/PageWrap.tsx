@@ -9,7 +9,7 @@ interface PageWrapProps {
 export default function PageWrap({ children, title }: PageWrapProps) {
   return (
     <IonPage>
-      <title>{title || 'Memduo App'}</title>
+      <title>{title || 'fcs App'}</title>
       {children}
     </IonPage>
   );

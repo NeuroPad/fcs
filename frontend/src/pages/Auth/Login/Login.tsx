@@ -122,7 +122,7 @@ export default function Login() {
 
           <div>
             <p>
-              New to Memduo? <Link to='/register'>Create an account</Link>
+              New to fcs? <Link to='/register'>Create an account</Link>
             </p>
           </div>
         </div>
