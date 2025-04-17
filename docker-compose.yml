@@ -9,8 +9,8 @@ services:
       - .env
     environment:
       - ENVIRONMENT=development
-      - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USER=${NEO4J_USERNAME}
+      - NEO4J_URI=${NEO4J_URI}
+      - NEO4J_USER=${NEO4J_USERNAME} 
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
@@ -20,8 +20,6 @@ services:
       - models_data:/app/models
     networks:
       - app-network
-    depends_on:
-      - neo4j
 
   frontend:
     build: ./frontend
@@ -32,27 +30,6 @@ services:
     networks:
       - app-network
 
-  neo4j:
-    image: neo4j:latest
-    environment:
-      - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
-      - NEO4J_PLUGINS=["apoc"]
-      - NEO4J_apoc_export_file_enabled=true
-      - NEO4J_apoc_import_file_enabled=true
-      - NEO4J_apoc_import_file_use__neo4j__config=true
-      # Add Java options for Vector API
-      - NEO4J_dbms_jvm_additional=--add-modules jdk.incubator.vector
-    ports:
-      - "9474:7474"  # HTTP
-      - "9687:7687"  # Bolt
-    volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
-      - neo4j_plugins:/plugins
-      - neo4j_import:/import
-    networks:
-      - app-network
-
 networks:
   app-network:
     driver: bridge
@@ -60,11 +37,3 @@ networks:
 volumes:
   models_data:
     # Named volume for persisting downloaded models
-  neo4j_data:
-    # Named volume for Neo4j data
-  neo4j_logs:
-    # Named volume for Neo4j logs
-  neo4j_plugins:
-    # Named volume for Neo4j plugins
-  neo4j_import:
-    # Named volume for Neo4j import directory

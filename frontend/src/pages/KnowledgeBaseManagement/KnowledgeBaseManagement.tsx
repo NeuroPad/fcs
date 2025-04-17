@@ -293,10 +293,10 @@ const KnowledgeBaseManagement: React.FC = () => {
                 disabled={isReindexing}
               >
                 <IonIcon slot="start" icon={refreshCircle} />
-                Rebuild Knowledge Graph
+                Rebuild Knowledge Graph WITH LLM
               </IonButton>
               
-              <IonButton
+              {/* <IonButton
                 expand="block"
                 color="secondary"
                 onClick={handleRelikIndex}
@@ -305,7 +305,7 @@ const KnowledgeBaseManagement: React.FC = () => {
               >
                 <IonIcon slot="start" icon={refreshCircle} />
                 Rebuild with Relik
-              </IonButton>
+              </IonButton> */}
             </IonCardContent>
           </IonCard>
 
