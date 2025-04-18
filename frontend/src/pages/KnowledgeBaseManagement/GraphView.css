@@ -33,8 +33,8 @@
 
 .graph-canvas-wrapper {
   width: 100%;
-  height: 600px;
-  border-radius: 12px;
+  height: calc(100vh - 100px); /* Adjust based on your layout */
+  position: relative;
   overflow: hidden;
   background: #f8f9fa;
   margin-top: 32px;

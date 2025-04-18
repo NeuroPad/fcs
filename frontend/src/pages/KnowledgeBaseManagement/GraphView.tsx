@@ -31,38 +31,56 @@ const SAMPLE_EDGES = [
 ];
 
 const GraphView: React.FC<GraphViewProps> = ({ relationships }) => {
-  // Use sample data if relationships is empty
   const { nodes, edges } = useMemo(() => {
     if (!relationships || relationships.length === 0) {
       return { nodes: SAMPLE_NODES, edges: SAMPLE_EDGES };
     }
+
     const nodeMap = new Map<string, any>();
     const edges: any[] = [];
+
     relationships.forEach(rel => {
-      const isSpecial = rel.targetNode.toLowerCase().includes('ticket') || rel.targetNode.toLowerCase().includes('concert');
-      if (!nodeMap.has(rel.sourceNode)) {
-        nodeMap.set(rel.sourceNode, {
-          id: rel.sourceNode,
-          label: rel.sourceNode,
+      // Skip invalid relationships
+      if (!rel.sourceNode || !rel.targetNode) {
+        console.warn('Invalid relationship found:', rel);
+        return;
+      }
+
+      const targetNodeStr = String(rel.targetNode);
+      const sourceNodeStr = String(rel.sourceNode);
+      
+      const isSpecial = targetNodeStr.toLowerCase().includes('ticket') || 
+                       targetNodeStr.toLowerCase().includes('concert');
+
+      if (!nodeMap.has(sourceNodeStr)) {
+        nodeMap.set(sourceNodeStr, {
+          id: sourceNodeStr,
+          label: sourceNodeStr,
           fill: '#e91e63',
         });
       }
-      if (!nodeMap.has(rel.targetNode)) {
-        nodeMap.set(rel.targetNode, {
-          id: rel.targetNode,
-          label: rel.targetNode,
+
+      if (!nodeMap.has(targetNodeStr)) {
+        nodeMap.set(targetNodeStr, {
+          id: targetNodeStr,
+          label: targetNodeStr,
           fill: isSpecial ? '#2196f3' : '#e91e63',
         });
       }
+
       edges.push({
-        id: rel.id,
-        source: rel.sourceNode,
-        target: rel.targetNode,
-        label: rel.relationship,
+        id: rel.id || `${sourceNodeStr}->${targetNodeStr}`,
+        source: sourceNodeStr,
+        target: targetNodeStr,
+        label: rel.relationship || '',
         fill: '#aaa',
       });
     });
-    return { nodes: Array.from(nodeMap.values()), edges };
+
+    return { 
+      nodes: Array.from(nodeMap.values()), 
+      edges 
+    };
   }, [relationships]);
 
   const graphRef = useRef(null);
