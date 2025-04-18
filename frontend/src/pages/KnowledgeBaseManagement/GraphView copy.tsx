@@ -1,8 +1,8 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { GraphCanvas, useSelection } from 'reagraph';
-import { IonIcon } from '@ionic/react';
-import { reloadCircleOutline, pauseCircleOutline, playCircleOutline } from 'ionicons/icons';
+import React, { useMemo, useRef } from 'react';
+import { GraphCanvas } from 'reagraph';
 import './GraphView.css';
+
+import { useSelection } from 'reagraph';
 
 interface RelationshipData {
   id: string;
@@ -30,14 +30,10 @@ const SAMPLE_EDGES = [
   { id: "1->4", source: "n-1", target: "n-4", label: "Edge 1-4", fill: "#aaa" }
 ];
 
-const GraphView: React.FC<GraphViewProps> = ({ relationships }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isOrbiting, setIsOrbiting] = useState(true);
-  const graphRef = useRef(null);
-  
+const GraphView2: React.FC<GraphViewProps> = ({ relationships }) => {
   const { nodes, edges } = useMemo(() => {
     if (!relationships || relationships.length === 0) {
-      return { nodes: [], edges: [] };  // Return empty instead of sample data
+      return { nodes: SAMPLE_NODES, edges: SAMPLE_EDGES };
     }
 
     const nodeMap = new Map<string, any>();
@@ -87,19 +83,7 @@ const GraphView: React.FC<GraphViewProps> = ({ relationships }) => {
     };
   }, [relationships]);
 
-  // Simulate loading state
-  useEffect(() => {
-    setIsLoading(true);
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [relationships]);
-
-  const toggleOrbit = () => {
-    setIsOrbiting(!isOrbiting);
-  };
-
+  const graphRef = useRef(null);
   const {
     selections,
     actives,
@@ -127,60 +111,23 @@ const GraphView: React.FC<GraphViewProps> = ({ relationships }) => {
           <span>Special Entity</span>
         </div>
       </div>
-      
-      {/* Remove the controls div as the buttons are removed */}
-      {/* <div className="graph-controls"> ... </div> */}
-
-      <div className="orbit-controls">
-        <button onClick={toggleOrbit} title={isOrbiting ? 'Pause Orbit' : 'Start Orbit'}>
-          <IonIcon icon={isOrbiting ? pauseCircleOutline : playCircleOutline} />
-        </button>
-      </div>
-
       <div className="graph-canvas-wrapper">
-        <div className="brain-background"></div>
-        
-        {isLoading && (
-          <div className="graph-message loading">
-            <IonIcon icon={reloadCircleOutline} className="spin-icon" />
-            <p>Loading your memory graph...</p>
-          </div>
-        )}
-        
-        {!isLoading && nodes.length === 0 && (
-          <div className="graph-message">
-            <h3>Memory Empty</h3>
-            <p>No connections found in your knowledge graph.</p>
-            <p>Start adding relationships to visualize your neural network.</p>
-          </div>
-        )}
-        
-        {!isLoading && nodes.length > 0 && (
-          <GraphCanvas
-            ref={graphRef}
-            nodes={nodes}
-            edges={edges}
-            labelType="all"
-            draggable
-            selections={selections}
-            actives={actives}
-            onNodeClick={onNodeClick}
-            onCanvasClick={onCanvasClick}
-            onNodePointerOver={onNodePointerOver}
-            onNodePointerOut={onNodePointerOut}
-            layoutType="treeTd3d"
-            layoutOverrides={{
-              nodeStrength: -600,
-              linkDistance: 180,
-            }}
-            edgeArrowPosition="none"
-            cameraMode={isOrbiting ? "orbit" : "pan"}
-            animated={true}
-          />
-        )}
+        <GraphCanvas
+          ref={graphRef}
+          nodes={nodes}
+          edges={edges}
+          labelType="all"
+          draggable
+          selections={selections}
+          actives={actives}
+          onNodeClick={onNodeClick}
+          onCanvasClick={onCanvasClick}
+          onNodePointerOver={onNodePointerOver}
+          onNodePointerOut={onNodePointerOut}
+        />
       </div>
     </div>
   );
 };
 
-export default GraphView;
+export default GraphView2;

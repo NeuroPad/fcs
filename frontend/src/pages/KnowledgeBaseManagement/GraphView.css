@@ -4,6 +4,8 @@
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  height: 100%;
+  width: 100%;
 }
 
 .entity-types-legend {
@@ -15,6 +17,49 @@
   padding: 8px 16px;
   z-index: 2;
   box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.graph-controls {
+  position: absolute;
+  right: 16px;
+  /* Adjusted top/transform for potentially better centering */
+  top: 32px;
+  /* transform: translateY(-50%); */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10; /* Ensure controls are above graph and background */
+  background: rgba(255,255,255,0.95);
+  padding: 8px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.graph-controls button {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  font-size: 20px; /* Adjust icon size if needed */
+}
+
+.graph-controls button:hover {
+  background: #f0f0f0;
+  color: #333;
+  transform: scale(1.05);
+}
+
+.graph-controls button svg {
+  width: 20px;
+  height: 20px;
 }
 
 .legend-item {
@@ -33,15 +78,139 @@
 
 .graph-canvas-wrapper {
   width: 100%;
-  height: calc(100vh - 100px); /* Adjust based on your layout */
-  position: relative;
+  height: calc(100vh - 100px); /* Adjust as needed */
+  position: relative; /* Needed for absolute positioning of children */
   overflow: hidden;
-  background: #f8f9fa;
+  background: #f8f9fa; /* Fallback background */
+  border-radius: 8px;
   margin-top: 32px;
+}
+
+/* New style for the background image container */
+.brain-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* Use the path to your brain image */
+  background-image: url('../../../public/assets/brain-outline.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: contain; /* Or 'cover', adjust as needed */
+  opacity: 0.15; /* Make it faint so graph is visible */
+  z-index: 1; /* Place it behind the graph canvas */
+  pointer-events: none; /* Make it non-interactive */
+}
+
+/* Ensure GraphCanvas is above the background */
+:global(.reagraph-canvas) {
+  position: relative;
+  z-index: 2;
+  background: transparent !important; /* Make canvas background transparent */
+}
+
+/* Style overrides for brain-like visualization */
+:global(.reagraph-node) {
+  transition: all 0.3s ease;
+}
+
+:global(.reagraph-edge) {
+  stroke-width: 1.5;
+  opacity: 0.6;
+}
+
+:global(.reagraph-node:hover) {
+  transform: scale(1.1);
+}
+
+:global(.reagraph-canvas) {
+  background: linear-gradient(145deg, #f8f9fa, #ffffff);
 }
 
 .graph-empty-state {
   text-align: center;
   color: #888;
   padding: 40px 0;
+  position: relative; /* Ensure it's above background */
+  z-index: 3;
+}
+
+.graph-message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: #666;
+  z-index: 2;
+}
+
+.graph-message h3 {
+  margin-bottom: 16px;
+  color: #333;
+}
+
+.loader {
+  border: 3px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 3px solid #2196f3;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.orbit-controls {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+}
+
+.orbit-controls button {
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: all 0.2s ease;
+}
+
+.orbit-controls button:hover {
+  transform: scale(1.1);
+  background: white;
+}
+
+.orbit-controls ion-icon {
+  font-size: 24px;
+  color: #2196f3;
+}
+
+.graph-message.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.spin-icon {
+  font-size: 48px;
+  color: #2196f3;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

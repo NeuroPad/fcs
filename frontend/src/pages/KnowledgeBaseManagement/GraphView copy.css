@@ -1,0 +1,47 @@
+.graph-view-container {
+  position: relative;
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+
+.entity-types-legend {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: rgba(255,255,255,0.95);
+  border-radius: 8px;
+  padding: 8px 16px;
+  z-index: 2;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin-right: 8px;
+  display: inline-block;
+}
+
+.graph-canvas-wrapper {
+  width: 100%;
+  height: calc(100vh - 100px); /* Adjust based on your layout */
+  position: relative;
+  overflow: hidden;
+  background: #f8f9fa;
+  margin-top: 32px;
+}
+
+.graph-empty-state {
+  text-align: center;
+  color: #888;
+  padding: 40px 0;
+}
