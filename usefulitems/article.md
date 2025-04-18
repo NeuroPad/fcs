@@ -88,6 +88,7 @@ def main():
         #model="relik-ie/relik-relation-extraction-large", model_config={"skip_metadata": True, "device":"cuda"}
     )
 
+
     print("start openai")
     llm = OpenAI(model="gpt-4o", temperature=0.0)
     embed_model = OpenAIEmbedding(model_name="text-embedding-3-small")
