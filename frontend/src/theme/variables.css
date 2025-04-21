@@ -92,23 +92,23 @@ body {
 }
 
 body.dark {
-  --ion-color-primary: #612A74;
-  --ion-color-primary-rgb: 97, 42, 116;
+  --ion-color-primary: #0A7553;
+  --ion-color-primary-rgb: 10, 117, 83;
   --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade: #552566;
-  --ion-color-primary-shade-rgb: 85, 37, 102;
-  --ion-color-primary-tint: #713F82;
-  --ion-color-primary-tint-rgb: 113, 63, 130;
+  --ion-color-primary-shade: #096548;
+  --ion-color-primary-shade-rgb: 9, 101, 72;
+  --ion-color-primary-tint: #238364;
+  --ion-color-primary-tint-rgb: 35, 131, 100;
 
-  --ion-color-secondary: #8B4F9F;
-  --ion-color-secondary-rgb: 139, 79, 159;
+  --ion-color-secondary: #2B4C3F;
+  --ion-color-secondary-rgb: 43, 76, 63;
   --ion-color-secondary-contrast: #ffffff;
   --ion-color-secondary-contrast-rgb: 255, 255, 255;
-  --ion-color-secondary-shade: #7A458C;
-  --ion-color-secondary-shade-rgb: 122, 69, 140;
-  --ion-color-secondary-tint: #9661A9;
-  --ion-color-secondary-tint-rgb: 150, 97, 169;
+  --ion-color-secondary-shade: #264337;
+  --ion-color-secondary-shade-rgb: 38, 67, 55;
+  --ion-color-secondary-tint: #405E52;
+  --ion-color-secondary-tint-rgb: 64, 94, 82;
 
   --ion-color-tertiary: #B284C2;
   --ion-color-tertiary-rgb: 178, 132, 194;
@@ -159,11 +159,10 @@ body.dark {
   --ion-color-light-shade: #242627;
   --ion-color-light-tint: #36383A;
 
-  --ion-color-base: #ffffff !important;
-  ion-icon {
-    color: #ffffff !important;
-  }
+  --ion-background-color: #121212;
+  --ion-text-color: #F3EEE9;
 }
+
 
 /*
    * iOS Dark Theme

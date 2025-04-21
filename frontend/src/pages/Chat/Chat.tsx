@@ -14,6 +14,7 @@ import {
   getChatById,
   sendMessage,
   setMessages,
+  addUserMessage,
 } from '../../features/chatSlice';
 import MarkdownLatexRenderer from '../../components/AI/MarkdownLatexRenderer';
 import './Chat.css';
@@ -31,7 +32,8 @@ const Chat: React.FC = () => {
 
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [queryMode, setQueryMode] = useState<QueryMode>('normal');
+  // Changed default mode to 'graph' instead of 'normal'
+  const [queryMode, setQueryMode] = useState<QueryMode>('graph');
 
   useEffect(() => {
     if (bottomRef.current) {
@@ -49,20 +51,27 @@ const Chat: React.FC = () => {
   const sendNewMessage = async () => {
     if (newMessage.trim() !== '' && !isTyping) {
       setIsTyping(true);
+      // Store the message before clearing the input
+      const messageToSend = newMessage;
+      // Clear the input immediately for better user experience
+      setNewMessage('');
+      
       try {
+        // Add user message to the chat immediately
+        dispatch(addUserMessage(messageToSend));
+        
         if (chatId) {
           await dispatch(sendMessage({ 
             sessionId: chatId.toString(), // Convert number to string
-            message: newMessage,
+            message: messageToSend,
             mode: queryMode 
           })).unwrap();
         } else {
           await dispatch(createChat({ 
-            question: newMessage,
+            question: messageToSend,
             mode: queryMode 
           })).unwrap();
         }
-        setNewMessage('');
       } catch (error) {
         console.error('Error sending message:', error);
       } finally {
@@ -72,6 +81,8 @@ const Chat: React.FC = () => {
   };
 
   // Add mode selector component
+  // Mode selector component is commented out but preserved for future use
+  /*
   const ModeSelector = () => (
     <div style={{ 
       display: 'flex', 
@@ -100,13 +111,15 @@ const Chat: React.FC = () => {
       </IonChip>
     </div>
   );
+  */
 
   return (
     <IonPage>
-      <Header title="fcs Chat" />
+      <Header title="FCS Chat" />
       <div className="chat-layout">
         <div className="chat-interface-container">
-          <ModeSelector />
+          {/* Commented out ModeSelector component */}
+          {/* <ModeSelector /> */}
           <IonContent className="chat-content">
             <div className="messages-container">
               {selectedChat?.map((msg, index) => (

@@ -144,6 +144,16 @@ export const chatSlice = createSlice({
       state.selectedChat = action.payload;
       state.chatId= null;
     },
+    // Add a new reducer to add user message immediately
+    addUserMessage: (state, action: PayloadAction<string>) => {
+      state.selectedChat = [
+        ...state.selectedChat,
+        {
+          role: 'user',
+          content: action.payload,
+        }
+      ];
+    },
   },
   extraReducers(builder) {
     builder
@@ -198,5 +208,5 @@ export const chatSlice = createSlice({
   },
 });
 
-export const { setMessages } = chatSlice.actions;
+export const { setMessages, addUserMessage } = chatSlice.actions;
 export default chatSlice.reducer;

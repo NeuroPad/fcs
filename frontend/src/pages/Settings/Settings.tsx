@@ -52,7 +52,7 @@ const Settings: React.FC = () => {
   const contentManagement = [
     { name: 'Document Management', url: 'documents', icon: documentTextOutline },
     { name: 'User Management', url: 'users', icon: peopleOutline },
-    { name: 'Knowledge Base', url: 'knowledge-base', icon: analyticsOutline },
+    { name: 'Knowledge Base', url: 'knowledgebase', icon: analyticsOutline },
   ];
 
   const systemSettings = [
