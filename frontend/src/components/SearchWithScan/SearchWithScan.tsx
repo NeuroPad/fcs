@@ -90,7 +90,7 @@ const SearchWithScan: React.FC<SearchWithScanProps> = ({
           placeholder={placeholder}
           className="custom-searchbar"
         /> */}
-        <IonButton
+        {/* <IonButton
           expand="block"
           fill="solid"
           color="primary"
@@ -99,7 +99,7 @@ const SearchWithScan: React.FC<SearchWithScanProps> = ({
         >
           <IonIcon style={{ color: "#fff" }} icon={scanOutline} slot="start" />
           Search an image and analyze
-        </IonButton>
+        </IonButton> */}
         {/* <div className="scan-button" onClick={handleScanClick}>
           <IonIcon icon={scanOutline} />
         </div> */}
