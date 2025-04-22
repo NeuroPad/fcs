@@ -7046,6 +7046,11 @@ filepond-plugin-image-preview@^4.6.12:
   resolved "https://registry.yarnpkg.com/filepond-plugin-image-preview/-/filepond-plugin-image-preview-4.6.12.tgz#adcff8be50f001e21ca8221a53c6870b63ebe0fe"
   integrity sha512-Y8ETX5QVV0mbPB0586UH8AUmG9tZg8PuN5bdEAIlZVJFTct5ebViJ7+Am94/VhTPjLqZjBf1zmDq5JU6XRsZKw==
 
+filepond@^4.32.7:
+  version "4.32.7"
+  resolved "https://registry.yarnpkg.com/filepond/-/filepond-4.32.7.tgz#5dc10d1ffeefa806aab6a4e5b0fe27a686db5318"
+  integrity sha512-L2idUfC31Qb2ZuFn8yAjX+Km6Ouq0kQn6JHcwhqrl5Ee9cB7xctLa0nkbbAeCML2+a1/cUsd0TqBgVcxYW08GA==
+
 filesize@^8.0.6:
   version "8.0.7"
   resolved "https://registry.npmjs.org/filesize/-/filesize-8.0.7.tgz"
