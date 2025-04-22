@@ -38,6 +38,18 @@ from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
 
+ENTITY_NODE_RETURN: LiteralString = """
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.group_id AS group_id,
+            n.created_at AS created_at, 
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes
+            """
+
 
 class EpisodeType(Enum):
     """
@@ -318,19 +330,14 @@ class EntityNode(Node):
 
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
-        records, _, _ = await driver.execute_query(
+        query = (
             """
-        MATCH (n:Entity {uuid: $uuid})
-        RETURN
-            n.uuid As uuid, 
-            n.name AS name,
-            n.name_embedding AS name_embedding,
-            n.group_id AS group_id,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
-        """,
+                            MATCH (n:Entity {uuid: $uuid})
+                            """
+            + ENTITY_NODE_RETURN
+        )
+        records, _, _ = await driver.execute_query(
+            query,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
             routing_='r',
@@ -348,16 +355,8 @@ class EntityNode(Node):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity) WHERE n.uuid IN $uuids
-        RETURN
-            n.uuid As uuid, 
-            n.name AS name,
-            n.name_embedding AS name_embedding,
-            n.group_id AS group_id,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
-        """,
+        """
+            + ENTITY_NODE_RETURN,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
             routing_='r',
@@ -383,16 +382,8 @@ class EntityNode(Node):
         MATCH (n:Entity) WHERE n.group_id IN $group_ids
         """
             + cursor_query
+            + ENTITY_NODE_RETURN
             + """
-        RETURN
-            n.uuid As uuid, 
-            n.name AS name,
-            n.name_embedding AS name_embedding,
-            n.group_id AS group_id,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
         ORDER BY n.uuid DESC
         """
             + limit_query,
