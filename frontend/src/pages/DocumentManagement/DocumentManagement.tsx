@@ -15,15 +15,30 @@ import {
   IonRow,
   IonCol
 } from '@ionic/react';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import DataTable from 'react-data-table-component';
 import { trash, eye, cloudUpload, close, book, images } from 'ionicons/icons';
-import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 import Header from '../../components/Header/Header';
 import Container from '../../components/Container/Container';
 import { API_BASE_URL } from '../../api/config';
 
+// Import React FilePond
+import { FilePond, registerPlugin } from 'react-filepond';
+
+// Import FilePond styles
+import 'filepond/dist/filepond.min.css';
+
+// Import the Image EXIF Orientation and Image Preview plugins
+import FilePondPluginImageExifOrientation from "filepond-plugin-image-exif-orientation";
+import FilePondPluginImagePreview from "filepond-plugin-image-preview";
+import "filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css";
+
+// Register the plugins
+registerPlugin(FilePondPluginImageExifOrientation, FilePondPluginImagePreview);
+
+// Create a wrapper component to fix TypeScript issues
+const FilePondComponent = FilePond as any;
 
 interface Document {
   filename: string;
@@ -34,9 +49,8 @@ interface Document {
   knowledgeBaseIndexed: boolean;
   status: string;
   path: string;
-  type: string;  // Add this line
+  type: string;
 }
-
 
 const DocumentManagement: React.FC = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -47,6 +61,8 @@ const DocumentManagement: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isIndexing, setIsIndexing] = useState(false);
   const [isMultimodalIndexing, setIsMultimodalIndexing] = useState(false);
+  const [files, setFiles] = useState<any[]>([]);
+  const pondRef = useRef<any>(null);
 
   const fetchDocuments = async () => {
     try {
@@ -102,57 +118,6 @@ const DocumentManagement: React.FC = () => {
       showError('Error during multimodal indexing');
     } finally {
       setIsMultimodalIndexing(false);
-    }
-  };
-
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    try {
-      setIsUploading(true);
-      const formData = new FormData();
-      acceptedFiles.forEach((file) => {
-        formData.append('files', file);
-      });
-
-      await axios.post(`${API_BASE_URL}/files/upload-files`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      showSuccess('Files uploaded successfully');
-      fetchDocuments();
-      setShowUploadModal(false);
-    } catch (error) {
-      showError('Error uploading files');
-    } finally {
-      setIsUploading(false);
-    }
-  }, []);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'application/pdf': ['.pdf'],
-      'text/markdown': ['.md'],
-      'application/json': ['.json'],
-      'text/plain': ['.txt'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'application/msword': ['.doc']  // Add support for .doc files
-    }
-  });
-
-  const handleView = (filename: string) => {
-    // Use the correct endpoint path that matches the FastAPI route
-    window.open(`${API_BASE_URL}/files/file/${filename}`, '_blank');
-  };
-
-  const handleDelete = async (filename: string) => {
-    try {
-      await axios.delete(`${API_BASE_URL}/files/file/${filename}`);
-      showSuccess('File deleted successfully');
-      fetchDocuments();
-    } catch (error) {
-      showError('Error deleting file');
     }
   };
 
@@ -242,111 +207,57 @@ const DocumentManagement: React.FC = () => {
     },
   ];
 
+  const handleView = (filename: string) => {
+    // Use the correct endpoint path that matches the FastAPI route
+    window.open(`${API_BASE_URL}/files/file/${filename}`, '_blank');
+  };
+
+  const handleDelete = async (filename: string) => {
+    try {
+      await axios.delete(`${API_BASE_URL}/files/file/${filename}`);
+      showSuccess('File deleted successfully');
+      fetchDocuments();
+    } catch (error) {
+      showError('Error deleting file');
+    }
+  };
+
   return (
     <IonPage>
       <Header title="Document Management" />
-
-      
+      <IonContent>
         <Container>
           <div className="document-management-container">
-            <div className="table-header">
-              <div className="action-buttons-group">
-
-                <IonGrid>
-                  <IonRow>
-
-                   <IonCol>
-                      <IonButton
-                        onClick={() => setShowUploadModal(true)}
-                        disabled={isUploading}
-                      >
-                        <IonIcon className="icon" icon={cloudUpload} slot="start" />
-                        <span className="button-text">Upload Document</span>
-                      </IonButton>
-                    </IonCol>
-
-                    <IonCol>
-                      <IonButton
-                        onClick={handleProcessDocuments}
-                        disabled={isProcessing}
-                        color="primary"
-                      >
-                        {isProcessing ? (
-                          <>
-                            <IonSpinner className="icon" name="crescent" />
-                            <span className="button-text">Processing...</span>
-                          </>
-                        ) : (
-                          <>
-                            <IonIcon className="icon" icon={book} slot="start" />
-                            <span className="button-text">Process Documents</span>
-                          </>
-                        )}
-                      </IonButton>
-                    </IonCol>
-                    {/* <IonCol>
-                      <IonButton
-                        onClick={handleIndexImages}
-                        disabled={isIndexing}
-                        color="primary"
-                      >
-                        {isIndexing ? (
-                          <>
-                            <IonSpinner name="crescent" />
-                            <span className="button-text">Indexing...</span>
-                          </>
-                        ) : (
-                          <>
-                            <IonIcon className="icon" icon={images} slot="start" />
-                            <span className="button-text">Index Images</span>
-                          </>
-                        )}
-                      </IonButton>
-                    </IonCol> */}
-                   
-                    <IonCol>
-                    <IonButton
-                      onClick={handleMultimodalIndex}
-                      disabled={isMultimodalIndexing}
-                      color="primary"
-                    >
-                      {isMultimodalIndexing ? (
-                        <>
-                          <IonSpinner name="crescent" />
-                          <span className="button-text">Indexing Multimodal...</span>
-                        </>
-                      ) : (
-                        <>
-                          <IonIcon className="icon" icon={book} slot="start" />
-                          <span className="button-text">Index Multimodal</span>
-                        </>
-                      )}
-                    </IonButton>
-                  </IonCol>
-
-                  </IonRow>
-                </IonGrid>
-
-
-              </div>
+            <div className="document-actions">
+              <IonButton onClick={() => setShowUploadModal(true)}>
+                <IonIcon icon={cloudUpload} slot="start" />
+                Upload Documents
+              </IonButton>
+              <IonButton onClick={handleProcessDocuments} disabled={isProcessing}>
+                {isProcessing ? <IonSpinner name="crescent" /> : <IonIcon icon={book} slot="start" />}
+                Process Documents
+              </IonButton>
+              <IonButton onClick={handleIndexImages} disabled={isIndexing}>
+                {isIndexing ? <IonSpinner name="crescent" /> : <IonIcon icon={images} slot="start" />}
+                Index Images
+              </IonButton>
+              <IonButton onClick={handleMultimodalIndex} disabled={isMultimodalIndexing}>
+                {isMultimodalIndexing ? <IonSpinner name="crescent" /> : <IonIcon icon={images} slot="start" />}
+                Multimodal Index
+              </IonButton>
             </div>
 
-            <DataTable
-              columns={columns}
-              data={documents}
-              pagination
-              responsive
-              highlightOnHover
-              striped
-              customStyles={{
-                headRow: {
-                  style: {
-                    backgroundColor: '#f4f5f8',
-                    fontWeight: 'bold',
-                  },
-                },
-              }}
-            />
+            <div className="document-table">
+              <DataTable
+                columns={columns}
+                data={documents}
+                pagination
+                highlightOnHover
+                responsive
+                striped
+                noDataComponent="No documents found"
+              />
+            </div>
           </div>
 
           <IonModal
@@ -365,39 +276,113 @@ const DocumentManagement: React.FC = () => {
             </IonHeader>
             <IonContent className="ion-padding">
               <div className="upload-modal-content">
-                <div {...getRootProps()} className="dropzone-container">
-                  <input {...getInputProps()} />
-                  <div className="dropzone-content">
-                    <IonIcon
-                      icon={cloudUpload}
-                      style={{ fontSize: '48px', marginBottom: '16px' }}
-                    />
-                    {isDragActive ? (
-                      <p>Drop your files here...</p>
-                    ) : (
-                      <div>
-                        <p>Drag 'n' drop files here</p>
-                        <p>or click to select files</p>
-                        <p className="supported-files">
-                          Supported files: PDF
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <FilePondComponent
+                  ref={pondRef}
+                  files={files}
+                  onupdatefiles={setFiles}
+                  allowMultiple={true}
+                  allowReorder={true}
+                  maxFiles={10}
+                  credits={false}
+                  instantUpload={true}
+                  labelIdle='Drag & Drop your files or <span class="filepond--label-action">Browse</span><br/><small>Accepted files: PDF, Markdown, JSON, Text, Word (.doc, .docx)</small>'
+                  labelFileProcessing="Uploading"
+                  labelFileProcessingComplete="Upload complete"
+                  labelFileProcessingAborted="Upload cancelled"
+                  labelFileProcessingError="Error during upload"
+                  labelTapToCancel="tap to cancel"
+                  labelTapToRetry="tap to retry"
+                  labelTapToUndo="tap to undo"
+                  styleProgressIndicatorPosition="right"
+                  styleButtonRemoveItemPosition="right"
+                  styleButtonProcessItemPosition="right"
+                  styleItemPanelAspectRatio={1}
+                  stylePanelAspectRatio={0.5}
+                  server={{
+                    process: (
+                      fieldName: string,
+                      file: File,
+                      metadata: any,
+                      load: (responseText: string) => void,
+                      error: (errorText: string) => void,
+                      progress: (isComputable: boolean, loaded: number, total: number) => void,
+                      abort: () => void,
+                      transfer: (transferredFile: any) => void,
+                      options: any
+                    ) => {
+                      // Create FormData
+                      const formData = new FormData();
+                      formData.append('files', file, file.name);
+                      
+                      // Create request
+                      const request = new XMLHttpRequest();
+                      request.open('POST', `${API_BASE_URL}/files/upload-files`);
+                      
+                      // Handle response
+                      request.onload = function() {
+                        if (request.status >= 200 && request.status < 300) {
+                          // Success
+                          load(request.responseText);
+                          fetchDocuments();
+                          showSuccess('Files uploaded successfully');
+                          setTimeout(() => {
+                            setShowUploadModal(false);
+                            setFiles([]);
+                          }, 1000);
+                        } else {
+                          // Error
+                          console.error('Upload error:', request.responseText);
+                          error('Upload failed');
+                          showError('Error uploading files');
+                        }
+                      };
+                      
+                      // Handle errors
+                      request.onerror = function() {
+                        console.error('Upload error:', request.responseText);
+                        error('Upload failed');
+                        showError('Error uploading files');
+                      };
+                      
+                      // Handle progress
+                      request.upload.onprogress = function(e) {
+                        progress(e.lengthComputable, e.loaded, e.total);
+                      };
+                      
+                      // Send request
+                      request.send(formData);
+                      
+                      // Return abort function
+                      return {
+                        abort: () => {
+                          request.abort();
+                          abort();
+                        }
+                      };
+                    }
+                  }}
+                  acceptedFileTypes={[
+                    'application/pdf',
+                    'text/markdown',
+                    'application/json',
+                    'text/plain',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'application/msword'
+                  ]}
+                />
               </div>
             </IonContent>
           </IonModal>
-
-          <IonToast
-            isOpen={showToast}
-            onDidDismiss={() => setShowToast(false)}
-            message={toastMessage}
-            duration={2000}
-            position="bottom"
-          />
         </Container>
-     
+      </IonContent>
+
+      <IonToast
+        isOpen={showToast}
+        onDidDismiss={() => setShowToast(false)}
+        message={toastMessage}
+        duration={3000}
+        position="bottom"
+      />
     </IonPage>
   );
 };

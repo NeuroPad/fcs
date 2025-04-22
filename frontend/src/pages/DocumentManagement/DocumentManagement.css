@@ -91,3 +91,33 @@
   margin-top: 8px;
 }
 
+/* FilePond customization */
+.filepond--panel-root {
+  background-color: #f5f7fa;
+  border: 1px dashed #ccc;
+}
+
+.filepond--drop-label {
+  color: #555;
+  font-size: 1rem;
+}
+
+.filepond--label-action {
+  text-decoration-color: #3880ff;
+  color: #3880ff;
+}
+
+.filepond--progress-indicator {
+  background-color: #3880ff;
+}
+
+.upload-modal-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.filepond--root {
+  margin-bottom: 0;
+  height: 100%;
+}
