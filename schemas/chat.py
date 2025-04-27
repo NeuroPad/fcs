@@ -12,6 +12,8 @@ class ChatMessageCreate(BaseModel):
 
 class ChatSessionResponse(BaseModel):
     id: int
+    user_id: int
+    title: Optional[str] = None
     created_at: datetime
     messages: List[dict] = []
 

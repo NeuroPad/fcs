@@ -462,15 +462,28 @@ class GraphRAGService:
             with self.neo4j_driver.session() as session:
                 result = session.run("""
                     MATCH (source)-[r]->(target)
-                    RETURN 
-                        id(r) as id,
-                        type(r) as relationship_type,
-                        source.name as source_node,
-                        target.name as target_node,
-                        r.confidence as confidence,
-                        r.timestamp as timestamp
+                    WITH 
+                    id(r) AS id,
+                    source.name AS source_node,
+                    target.name AS target_node,
+                    COALESCE(r.name, type(r)) AS relationship_label,
+                    r.timestamp AS timestamp,
+                    source.confidence AS source_conf,
+                    target.confidence AS target_conf
+                    WITH id, source_node, target_node, relationship_label, timestamp, source_conf, target_conf,
+                        CASE
+                        WHEN source_conf IS NOT NULL AND target_conf IS NOT NULL
+                            THEN (source_conf + target_conf) / 2.0
+                        WHEN source_conf IS NOT NULL
+                            THEN source_conf
+                        WHEN target_conf IS NOT NULL
+                            THEN target_conf
+                        ELSE 0.7
+                        END AS confidence
+                    RETURN *
                     ORDER BY id
                     LIMIT 1000
+
                 """)
 
                 relationships = []
@@ -478,11 +491,12 @@ class GraphRAGService:
                     relationships.append({
                         "id": str(record["id"]),
                         "sourceNode": record["source_node"],
-                        "relationship": record["relationship_type"],
+                        "relationship": record["relationship_label"],  # updated
                         "targetNode": record["target_node"],
-                        "confidence": float(record["confidence"] if record["confidence"] else 0.7),
+                        "confidence": float(record["confidence"]),
                         "lastUpdated": str(record["timestamp"]).split('T')[0] if record["timestamp"] else ""
                     })
+
 
                 return relationships
 

@@ -10,10 +10,11 @@ import logging
 from pathlib import Path
 
 from services.image_rag_service import ImageRAGService
+from services.graphiti_memory_service import GraphitiMemoryService, async_worker
 from api import router as api_router
 from api import relik_graph_rag
 
-# Initialize the service
+# Initialize the services
 image_rag_service = ImageRAGService(
     chroma_db_path=str(settings.CHROMA_DB_DIR),
     markdown_dir=settings.PROCESSED_FILES_DIR,
@@ -38,8 +39,22 @@ app.mount("/processed_files", StaticFiles(directory=str(settings.PROCESSED_FILES
 
 @app.on_event("startup")
 async def startup_event():
-    #Base.metadata.drop_all(bind=engine)  # Reset tables
+    # Initialize database
     init_db()
+    
+    # Initialize GraphitiMemoryService worker
+    await GraphitiMemoryService.initialize_worker()
+    
+    # Initialize a GraphitiMemoryService instance to build indices and constraints
+    memory_service = GraphitiMemoryService()
+    await memory_service.initialize()
+    logger.info("Initialized GraphitiMemoryService on startup")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    # Shutdown GraphitiMemoryService worker
+    await GraphitiMemoryService.shutdown_worker()
+    logger.info("Shutdown GraphitiMemoryService worker")
 
 # Include the API router
 app.include_router(api_router)
@@ -49,3 +64,7 @@ app.include_router(api_router)
 async def read_root():
     """Root endpoint that redirects to the API documentation."""
     return RedirectResponse(url="/docs")
+
+@app.get('/healthcheck')
+async def healthcheck():
+    return JSONResponse(content={'status': 'healthy'}, status_code=200)

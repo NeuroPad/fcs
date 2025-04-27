@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { get } from "../services/storage";
 
 const BASE_URL = 'api/';
 
@@ -19,8 +20,11 @@ export const api: AxiosInstance = axios.create({
   },
 });
 
-api.interceptors.request.use((config) => {
-  config.headers['Auth_Token'] = localStorage.getItem('token');
+api.interceptors.request.use(async (config) => {
+  const token = await get("token");
+  if (token) {
+    config.headers["Authorization"] = `Bearer ${token}`;
+  }
   return config;
 });
 

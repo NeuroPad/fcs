@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query, status
 from sqlalchemy.orm import Session
 from db.crud import ChatService
 from db.session import get_db
@@ -12,6 +12,7 @@ import logging
 
 from services.multimodal_rag_service import MultiModalRAGService
 from services.llama_index_graph_rag import GraphRAGService
+from services.auth.auth_service import get_user_from_token
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +31,28 @@ async def get_base_url(request: Request) -> str:
     return str(request.base_url).rstrip('/')
 
 @router.post("/new", response_model=ChatSessionResponse)
-async def create_new_chat(db: Session = Depends(get_db)):
+async def create_new_chat(
+    request: Request,
+    title: str = Form(None),
+    db: Session = Depends(get_db)
+):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    token = auth_header.split(" ")[1]
+    user, error = get_user_from_token(db, token)
+    if error:
+        raise HTTPException(status_code=401 if error == "Invalid token" else 404, detail=error)
     chat_service = ChatService(db)
-    session_id = chat_service.create_chat_session()
+    session_id = chat_service.create_chat_session(user_id=user.id, title=title)
     session = chat_service.get_chat_session(session_id)
-    return {"id": session.id, "created_at": session.created_at, "messages": []}
+    return {
+        "id": session.id,
+        "user_id": session.user_id,
+        "title": session.title,
+        "created_at": session.created_at,
+        "messages": []
+    }
 
 
 @router.get("/sessions")
@@ -47,7 +65,7 @@ async def get_all_chat_sessions(db: Session = Depends(get_db)):
 
 @router.get("/session/{session_id}", response_model=ChatSessionResponse)
 async def get_chat_session(
-    session_id: int, 
+    session_id: int,
     request: Request,
     db: Session = Depends(get_db)
 ):

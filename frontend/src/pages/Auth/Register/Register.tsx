@@ -15,6 +15,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [error, setError] = useState('');
 
   const schema = yup.object({
     name: yup.string().required('Name is required'),
@@ -47,11 +48,15 @@ export default function Register() {
   });
 
   const handleRegister = async (data: any) => {
-    console.log('data: ', data);
-
     setLoading(true);
-
-    await dispatch(registerUser(data))
+    setError('');
+    const payload = {
+      name: data.name,
+      email: data.email,
+      password: data.password,
+      role: 'user',
+    };
+    await dispatch(registerUser(payload))
       .unwrap()
       .then(() => {
         setLoading(false);
@@ -59,9 +64,8 @@ export default function Register() {
       })
       .catch((error) => {
         setLoading(false);
-        console.log('Hi: ', error);
+        setError(error);
       });
-
     setLoading(false);
   };
   return (
@@ -89,7 +93,7 @@ export default function Register() {
           />
 
           <h5>Create your account!</h5>
-
+          {error && <p style={{ color: 'red' }}>{error}</p>}
           <form
             onSubmit={handleSubmit(handleRegister)}
             style={{ width: '100%' }}
@@ -102,7 +106,6 @@ export default function Register() {
               />
               <p className='custom-input-error'>{errors.name?.message}</p>
             </div>
-
             <div className='custom-input-wrapper'>
               <input
                 placeholder='Email'
@@ -111,7 +114,6 @@ export default function Register() {
               />
               <p className='custom-input-error'>{errors.email?.message}</p>
             </div>
-
             <div className='custom-input-wrapper'>
               <input
                 placeholder='Password'
@@ -121,18 +123,11 @@ export default function Register() {
               />
               <IonIcon
                 icon={showPassword ? eyeOffOutline : eyeOutline}
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: 20,
-                  top: 10,
-                  cursor: 'pointer',
-                  fontSize: '20px',
-                }}
+                style={{ position: 'absolute', right: 20, top: 18, cursor: 'pointer' }}
+                onClick={() => setShowPassword((v) => !v)}
               />
               <p className='custom-input-error'>{errors.password?.message}</p>
             </div>
-
             <div className='custom-input-wrapper'>
               <input
                 placeholder='Confirm Password'
@@ -142,36 +137,23 @@ export default function Register() {
               />
               <IonIcon
                 icon={showConfirmPassword ? eyeOffOutline : eyeOutline}
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                style={{
-                  position: 'absolute',
-                  right: 20,
-                  top: 10,
-                  cursor: 'pointer',
-                  fontSize: '20px',
-                }}
+                style={{ position: 'absolute', right: 20, top: 18, cursor: 'pointer' }}
+                onClick={() => setShowConfirmPassword((v) => !v)}
               />
-              <p className='custom-input-error'>
-                {errors.confirm_password?.message}
-              </p>
+              <p className='custom-input-error'>{errors.confirm_password?.message}</p>
             </div>
-
             <IonButton
-              className='ion-margin-top ion-button-reset'
+              expand='block'
               type='submit'
-              expand='full'
-              shape='round'
               disabled={loading}
+              style={{ marginTop: 20 }}
             >
-              {loading ? 'Loading...' : 'Create an Account'}
+              {loading ? 'Registering...' : 'Register'}
             </IonButton>
           </form>
-
-          <div>
-            <p>
-              Already have an account? <Link to='/login'>Login</Link>
-            </p>
-          </div>
+          <p style={{ marginTop: 20 }}>
+            Already have an account? <Link to='/login'>Login</Link>
+          </p>
         </div>
       </Container>
     </IonPage>

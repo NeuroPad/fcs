@@ -1,15 +1,15 @@
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
 import { API_BASE_URL } from '../api/config';
+import { get } from '../services/storage';
 
-// Define the base URL for the API
 const BASE_URL = `${API_BASE_URL}/chat`;
 
 interface ChatMessage {
   role: string;
   content: string;
-  images?: string[]; // Array of image URLs
-  sources?: string[]; // Array of source links
+  images?: string[];
+  sources?: string[];
   created_at?: string;
 }
 
@@ -33,7 +33,6 @@ const initialState: ChatState = {
   chatId: null,
 };
 
-
 interface SendMessagePayload {
   sessionId: string;
   message: string;
@@ -44,27 +43,29 @@ interface CreateChatPayload {
   question: string;
   mode: 'normal' | 'graph' | 'combined';
 }
-// Create a new chat session
+
 export const createChat = createAsyncThunk(
   'chat/createChat',
   async ({ question, mode }: CreateChatPayload) => {
     try {
-      // First create a new chat session
-      const newSessionResponse = await axios.post(`${BASE_URL}/new`);
+      const token = await get('token');
+      const newSessionResponse = await axios.post(
+        `${BASE_URL}/new`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       const sessionId = newSessionResponse.data.id;
-
-      // Then send the question
-      const response = await fetch(`${API_BASE_URL}/chat/session/${sessionId}/ask?mode=${mode}`, {
+      await fetch(`${API_BASE_URL}/chat/session/${sessionId}/ask?mode=${mode}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ text: question }),
       });
-
-      // Get the updated chat session
-      const sessionResponse = await axios.get(`${BASE_URL}/session/${sessionId}`);
-
+      const sessionResponse = await axios.get(`${BASE_URL}/session/${sessionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return {
         messages: sessionResponse.data.messages,
         chatId: sessionId,
@@ -75,12 +76,14 @@ export const createChat = createAsyncThunk(
   }
 );
 
-// Get all chat sessions
 export const getUserChats = createAsyncThunk(
   'chat/getUserChats',
   async () => {
     try {
-      const response = await axios.get(`${BASE_URL}/sessions`);
+      const token = await get('token');
+      const response = await axios.get(`${BASE_URL}/sessions`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return response.data;
     } catch (error: any) {
       throw error.response?.data?.detail || 'An error occurred';
@@ -88,12 +91,14 @@ export const getUserChats = createAsyncThunk(
   }
 );
 
-// Get chat by ID
 export const getChatById = createAsyncThunk(
   'chat/getChatById',
   async (id: number) => {
     try {
-      const response = await axios.get(`${BASE_URL}/session/${id}`);
+      const token = await get('token');
+      const response = await axios.get(`${BASE_URL}/session/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return response.data;
     } catch (error: any) {
       throw error.response?.data?.detail || 'An error occurred';
@@ -101,21 +106,22 @@ export const getChatById = createAsyncThunk(
   }
 );
 
-// Send a message in existing chat
 export const sendMessage = createAsyncThunk(
   'chat/sendMessage',
   async ({ sessionId, message, mode }: SendMessagePayload) => {
     try {
-    const response = await fetch(`${API_BASE_URL}/chat/session/${sessionId}/ask?mode=${mode}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ text: message }),
-    });
-
-      // Get updated session
-      const sessionResponse = await axios.get(`${BASE_URL}/session/${sessionId}`);
+      const token = await get('token');
+      await fetch(`${API_BASE_URL}/chat/session/${sessionId}/ask?mode=${mode}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ text: message }),
+      });
+      const sessionResponse = await axios.get(`${BASE_URL}/session/${sessionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return sessionResponse.data;
     } catch (error: any) {
       throw error.response?.data?.detail || 'An error occurred';
@@ -123,12 +129,14 @@ export const sendMessage = createAsyncThunk(
   }
 );
 
-// Add this new thunk after the other thunks
 export const deleteChat = createAsyncThunk(
   'chat/deleteChat',
   async (id: number) => {
     try {
-      await axios.delete(`${BASE_URL}/session/${id}`);
+      const token = await get('token');
+      await axios.delete(`${BASE_URL}/session/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return id;
     } catch (error: any) {
       throw error.response?.data?.detail || 'An error occurred';
@@ -142,16 +150,15 @@ export const chatSlice = createSlice({
   reducers: {
     setMessages: (state, action: PayloadAction<ChatMessage[]>) => {
       state.selectedChat = action.payload;
-      state.chatId= null;
+      state.chatId = null;
     },
-    // Add a new reducer to add user message immediately
     addUserMessage: (state, action: PayloadAction<string>) => {
       state.selectedChat = [
         ...state.selectedChat,
         {
           role: 'user',
           content: action.payload,
-        }
+        },
       ];
     },
   },

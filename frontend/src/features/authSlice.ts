@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-import { api } from '../config/axiosConfig';
+import axios from 'axios';
+import { API_BASE_URL } from '../api/config';
 import { get, remove, set } from '../services/storage';
 
 interface AuthState {
@@ -7,6 +8,7 @@ interface AuthState {
   token: string | null;
   isLoading: boolean;
   error: string | null;
+  user: any | null;
 }
 
 const initialState: AuthState = {
@@ -14,49 +16,32 @@ const initialState: AuthState = {
   token: null,
   isLoading: false,
   error: null,
+  user: null,
 };
 
 export const loginUser = createAsyncThunk(
   'auth/login',
-  async (credential: any, { rejectWithValue }) => {
+  async (credential: { email: string; password: string }, { rejectWithValue }) => {
     try {
-      // Generate dummy token
-      const dummyToken = `${Date.now()}|${Math.random().toString(36).substring(2)}`;
-      // Create dummy user data using email as name
-      const dummyUser = {
-        id: Math.floor(Math.random() * 1000), // Random ID
-        name: credential.email,
-        email: credential.email,
-        email_verified_at: null,
-        created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        updated_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        deleted_at: null
-      };
-      
-      const dummyResponse = {
-        accessToken: dummyToken,
-        token_type: 'Bearer',
-        user: dummyUser
-      };
-
-      await set('token', dummyResponse.accessToken);
-      await set('auth-user', dummyResponse.user);
-      window.location.reload();
-      return dummyResponse;
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, credential);
+      const { access_token, token_type, user } = response.data;
+      await set('token', access_token);
+      await set('auth-user', user);
+      return { access_token, token_type, user };
     } catch (error: any) {
-      return rejectWithValue('Login failed');
+      return rejectWithValue(error.response?.data?.detail || 'Login failed');
     }
   }
 );
 
 export const registerUser = createAsyncThunk(
   'auth/register',
-  async (credential: any, { rejectWithValue }) => {
+  async (credential: { email: string; password: string; name: string; role: string }, { rejectWithValue }) => {
     try {
-      const response = await api.post('/auth/register', credential);
-      return response.data.data;
+      const response = await axios.post(`${API_BASE_URL}/auth/register`, credential);
+      return response.data;
     } catch (error: any) {
-      return rejectWithValue(error.response.data.message);
+      return rejectWithValue(error.response?.data?.detail || 'Registration failed');
     }
   }
 );
@@ -79,16 +64,10 @@ export const checkAuthStatus = createAsyncThunk(
     try {
       const token = await get('token');
       if (token) {
-        // Optionally, you can validate the token with your backend here
-        // const response = await api.post('/auth/validate-token', { token });
-        // return response.data.isValid;
-
-        // For now, we'll just assume the presence of a token means the user is authenticated
         return true;
       }
       return false;
     } catch (error) {
-      console.error('Failed to check auth status:', error);
       return false;
     }
   }
@@ -103,7 +82,7 @@ export const authSlice = createSlice({
       remove('auth-user');
       state.isAuthenticated = false;
       state.token = null;
-      //window.location.reload();
+      state.user = null;
     },
   },
   extraReducers(builder) {
@@ -112,8 +91,11 @@ export const authSlice = createSlice({
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(loginUser.fulfilled, (state) => {
+      .addCase(loginUser.fulfilled, (state, action) => {
         state.isLoading = false;
+        state.isAuthenticated = true;
+        state.token = action.payload.access_token;
+        state.user = action.payload.user;
       })
       .addCase(loginUser.rejected, (state, action) => {
         state.isLoading = false;
@@ -148,21 +130,13 @@ export const authSlice = createSlice({
         }
       });
 
-      builder
+    builder
       .addCase(checkAuthStatus.pending, (state) => {
         state.isLoading = true;
       })
       .addCase(checkAuthStatus.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isAuthenticated = action.payload;
-        if (!action.payload) {
-          state.token = null;
-        }
-      })
-      .addCase(checkAuthStatus.rejected, (state) => {
-        state.isLoading = false;
-        state.isAuthenticated = false;
-        state.token = null;
       });
   },
 });

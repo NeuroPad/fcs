@@ -19,8 +19,8 @@ class ChatService:
     def __init__(self, db_session: Session):
         self.db_session = db_session
 
-    def create_chat_session(self):
-        new_session = ChatSession()
+    def create_chat_session(self, user_id: int, title: str = None):
+        new_session = ChatSession(user_id=user_id, title=title)
         self.db_session.add(new_session)
         self.db_session.commit()
         return new_session.id
