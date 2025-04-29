@@ -43,7 +43,7 @@ class MultiModalRAGService:
         #self.llm = Ollama(model="command-r7b", request_timeout=1200)
         
          # Initialize Open Ai models
-        self.embed_model = OpenAIEmbedding(model_name="text-embedding-ada-002")
+        self.embed_model = OpenAIEmbedding(model_name="text-embedding-3-small")
         self.llm = OpenAI(api_key=settings.OPENAI_API_KEY, model="gpt-4o-mini")
         
         # Create text collection

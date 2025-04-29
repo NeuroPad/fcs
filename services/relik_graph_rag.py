@@ -43,7 +43,7 @@ class RelikGraphRAGService:
         #self.llm = Ollama(model="phi4", request_timeout=1200)
         
         # Initialize Open Ai models
-        self.embed_model = OpenAIEmbedding(model_name="text-embedding-ada-002")
+        self.embed_model = OpenAIEmbedding(model_name="text-embedding-3-small")
         self.llm = OpenAI(api_key=settings.OPENAI_API_KEY, model="gpt-4o-mini")
         self.splitter = SentenceSplitter(chunk_size=1024, chunk_overlap=20)
         
