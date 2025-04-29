@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+import json
 
 from llama_index.core import Document, PropertyGraphIndex, PromptTemplate
 from llama_index.llms.openai import OpenAI
@@ -199,7 +200,7 @@ class GraphRAGService:
             similarity_top_k=10,
         )
 
-    async def get_answer(self, question: str) -> ExtendedGraphRAGResponse:
+    async def get_answer(self, question: str, chat_history: List[dict] = None, user_id: str = None) -> ExtendedGraphRAGResponse:
 
         # Initialize VectorContextRetriever
         vector_retriever = VectorContextRetriever(
@@ -209,6 +210,28 @@ class GraphRAGService:
             path_depth=3,
             include_text=True,
         )
+        
+        # Format chat history as context if available
+        chat_context = ""
+        if chat_history and len(chat_history) > 0:
+            # Get the last 3 messages (or fewer if not available)
+            recent_history = chat_history[-3:] if len(chat_history) > 3 else chat_history
+            chat_context = "\n\nRecent conversation history:\n"
+            for msg in recent_history:
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                # Format the message based on role
+                if role == "user":
+                    chat_context += f"User: {content}\n"
+                elif role == "assistant":
+                    # For assistant messages, extract just the answer text if it's in JSON format
+                    try:
+                        parsed_content = json.loads(content)
+                        if "answer" in parsed_content:
+                            content = parsed_content["answer"]
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                    chat_context += f"Assistant: {content}\n"
 
         # Append additional instructions to the query
         qa_tmpl_str = (
@@ -216,7 +239,9 @@ class GraphRAGService:
             "---------------------\n"
             "{context_str}\n"
             "---------------------\n"
-            "Given the context information and not prior knowledge, "
+            "{chat_context}\n"
+            "---------------------\n"
+            "Given the context information and conversation history (if available), "
             "answer the query don't mention the word CONTEXT in your answer. If there are images in the context_str that are relevant to your answer, "
             "you MUST list them after your response in this exact format:\n\n"
             "image(s): processed_files/[document_name]_artifacts/[image_filename]\n\n"
@@ -230,9 +255,13 @@ class GraphRAGService:
         qa_tmpl = PromptTemplate(qa_tmpl_str)
 
         # Create Query Engine
-        query_engine = RetrieverQueryEngine.from_args(vector_retriever, text_qa_template=qa_tmpl, llm=self.llm)
+        query_engine = RetrieverQueryEngine.from_args(
+            vector_retriever, 
+            text_qa_template=qa_tmpl, 
+            llm=self.llm
+        )
 
-        # Perform a query with the modified question
+        # Perform a query with the modified question and chat context
         response = query_engine.query(question)
 
         # Extract the response text
@@ -271,6 +300,34 @@ class GraphRAGService:
         sources = extract_sources_from_nodes(response.source_nodes)  # Extract sources from source_nodes
         clean_response = clean_answer(full_response)
         logger.debug(f"Processed result: {response}")
+        
+        # Store the interaction in memory if user_id is provided
+        if user_id:
+            from services.graphiti_memory_service import GraphitiMemoryService, Message
+            memory_service = GraphitiMemoryService()
+            
+            # Add user query to memory
+            user_message = Message(
+                content=question,
+                role_type="user",
+                source_description="user query",
+                name=f"user-query-{datetime.now().strftime('%Y%m%d%H%M%S')}"  # Add a unique name
+            )
+            await memory_service.add_message(user_id, user_message)
+            
+            # Add AI response to memory with sources in the source description
+            source_description = "ai assistant"
+            if sources:
+                source_list = ", ".join(sources)
+                source_description = f"ai assistant with sources: {source_list}"
+            
+            ai_message = Message(
+                content=clean_response,
+                role_type="assistant",
+                source_description=source_description,
+                name=f"ai-response-{datetime.now().strftime('%Y%m%d%H%M%S')}"  # Add a unique name
+            )
+            await memory_service.add_message(user_id, ai_message)
 
         # Create and return ExtendedGraphRAGResponse
         result = ExtendedGraphRAGResponse(
@@ -280,9 +337,6 @@ class GraphRAGService:
         )
 
         # Log the result
-        print("Formatted Sources:", formatted_sources)
-        print("Sources from Nodes:", sources)
-        print("Result:", result)
         logger.info("Response processed successfully")
         logger.debug(f"Processed result: {result}")
 

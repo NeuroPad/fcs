@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import List, Dict, Any
 import logging
+import json
 from llama_index.core import SimpleDirectoryReader, StorageContext, Document, PromptTemplate
 from llama_index.core.indices import MultiModalVectorStoreIndex
 from llama_index.core.indices.property_graph import VectorContextRetriever
@@ -150,7 +151,7 @@ class MultiModalRAGService:
             logger.error(f"Error querying index: {str(e)}")
             raise
 
-    async def enhanced_query(self, query_text: str, top_k: int = 3) -> ExtendedGraphRAGResponse:
+    async def enhanced_query(self, query_text: str, top_k: int = 3, chat_history: List[dict] = None, user_id: str = None) -> ExtendedGraphRAGResponse:
         try:
             # Ensure the index is initialized.
             if not self.index:
@@ -159,7 +160,6 @@ class MultiModalRAGService:
                     storage_context=self.storage_context,
                     embed_model=self.embed_model
                 )
-
 
             # Retrieve multimodal results.
             multimodal_retriever = self.index.as_retriever(
@@ -183,10 +183,32 @@ class MultiModalRAGService:
             # Prepare the contexts from the retrieved results.
             graph_context = "\n".join([node.node.get_content() for node in graph_results])
             multimodal_context = "\n".join([result.node.get_content() for result in multimodal_results])
+            
+            # Format chat history as context if available
+            chat_context = ""
+            if chat_history and len(chat_history) > 0:
+                # Get the last 3 messages (or fewer if not available)
+                recent_history = chat_history[-3:] if len(chat_history) > 3 else chat_history
+                chat_context = "\n\nRecent conversation history:\n"
+                for msg in recent_history:
+                    role = msg.get("role", "")
+                    content = msg.get("content", "")
+                    # Format the message based on role
+                    if role == "user":
+                        chat_context += f"User: {content}\n"
+                    elif role == "assistant":
+                        # For assistant messages, extract just the answer text if it's in JSON format
+                        try:
+                            parsed_content = json.loads(content)
+                            if "answer" in parsed_content:
+                                content = parsed_content["answer"]
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                        chat_context += f"Assistant: {content}\n"
 
-            # Define the prompt template.
+            # Define the prompt template with chat history
             qa_tmpl = PromptTemplate(
-                "You have two types of context information below.\n"
+                "You have the following information to help answer the query.\n"
                 "---------------------\n"
                 "GRAPH CONTEXT (showing relationships and connections):\n"
                 "{graph_context}\n"
@@ -194,7 +216,9 @@ class MultiModalRAGService:
                 "MULTIMODAL CONTEXT (including text and images):\n"
                 "{multimodal_context}\n"
                 "---------------------\n"
-                "Using only this context and no prior knowledge, provide a comprehensive response that:\n"
+                "{chat_context}\n"
+                "---------------------\n"
+                "Using the above context and conversation history (if available), provide a comprehensive response that:\n"
                 "1. Directly addresses all aspects of the query\n"
                 "2. Explains key concepts clearly\n"
                 "3. Uses lists/numbered steps for multi-part information where necessary\n"
@@ -208,18 +232,15 @@ class MultiModalRAGService:
                 "Answer: "
             )
 
-           
             # Call the LLM directly with the formatted prompt.
-            # If your LLM supports async, you might use:
-            # response_text = await llm.apredict(formatted_prompt)
             response_text = self.llm.predict(
                 prompt=qa_tmpl,
                 query_str=query_text,
                 graph_context=graph_context,
-                multimodal_context=multimodal_context
+                multimodal_context=multimodal_context,
+                chat_context=chat_context
             )
 
-            # Extract images from the multimodal results.
             # Extract images with proper path formatting
             images = []
             for result in multimodal_results:
@@ -239,6 +260,32 @@ class MultiModalRAGService:
                         if not file_path.startswith("processed_files/"):
                             file_path = f"processed_files/{file_path.split('/')[-1]}"
                         sources.add(file_path)
+            
+            # Store the interaction in memory if user_id is provided
+            if user_id:
+                from services.graphiti_memory_service import GraphitiMemoryService, Message
+                memory_service = GraphitiMemoryService()
+                
+                # Add user query to memory
+                user_message = Message(
+                    content=query_text,
+                    role_type="user",
+                    source_description="user query"
+                )
+                await memory_service.add_message(user_id, user_message)
+                
+                # Add AI response to memory with sources in the source description
+                source_description = "ai assistant"
+                if sources:
+                    source_list = ", ".join(sources)
+                    source_description = f"ai assistant with sources: {source_list}"
+                
+                ai_message = Message(
+                    content=response_text,
+                    role_type="assistant",
+                    source_description=source_description
+                )
+                await memory_service.add_message(user_id, ai_message)
 
             # Return ExtendedGraphRAGResponse
             return ExtendedGraphRAGResponse(
@@ -251,7 +298,7 @@ class MultiModalRAGService:
             logger.error(f"Error in enhanced query: {str(e)}")
             raise
 
-    async def normal_query(self, query_text: str, top_k: int = 9) -> ExtendedGraphRAGResponse:
+    async def normal_query(self, query_text: str, top_k: int = 9, chat_history: List[dict] = None, user_id: str = None) -> ExtendedGraphRAGResponse:
         try:
             if not self.index:
                 self.index = MultiModalVectorStoreIndex(
@@ -271,14 +318,39 @@ class MultiModalRAGService:
             
             # Prepare the context from the retrieved results
             multimodal_context = "\n".join([result.node.get_content() for result in multimodal_results])
+            
+            # Format chat history as context if available
+            chat_context = ""
+            if chat_history and len(chat_history) > 0:
+                # Get the last 3 messages (or fewer if not available)
+                recent_history = chat_history[-3:] if len(chat_history) > 3 else chat_history
+                chat_context = "\n\nRecent conversation history:\n"
+                for msg in recent_history:
+                    role = msg.get("role", "")
+                    content = msg.get("content", "")
+                    # Format the message based on role
+                    if role == "user":
+                        chat_context += f"User: {content}\n"
+                    elif role == "assistant":
+                        # For assistant messages, extract just the answer text if it's in JSON format
+                        try:
+                            parsed_content = json.loads(content)
+                            if "answer" in parsed_content:
+                                content = parsed_content["answer"]
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                        chat_context += f"Assistant: {content}\n"
 
-            # Define the prompt template
+            # Define the prompt template with chat history
             qa_tmpl = PromptTemplate(
-                "Based strictly on the following context information:\n"
+                "Based on the following information:\n"
                 "---------------------\n"
+                "RETRIEVED CONTEXT:\n"
                 "{multimodal_context}\n"
                 "---------------------\n"
-                "Using only this context and no prior knowledge, provide a comprehensive response that:\n"
+                "{chat_context}\n"
+                "---------------------\n"
+                "Using the above context and conversation history (if available), provide a comprehensive response that:\n"
                 "1. Directly addresses all aspects of the query\n"
                 "2. Explains key concepts clearly\n"
                 "3. Uses lists/numbered steps for multi-part information where necessary\n"
@@ -297,7 +369,8 @@ class MultiModalRAGService:
             response_text = self.llm.predict(
                 prompt=qa_tmpl,
                 query_str=query_text,
-                multimodal_context=multimodal_context
+                multimodal_context=multimodal_context,
+                chat_context=chat_context
             )
 
             # Extract images with proper path formatting
@@ -319,6 +392,32 @@ class MultiModalRAGService:
                         if not file_path.startswith("processed_files/"):
                             file_path = f"processed_files/{file_path.split('/')[-1]}"
                         sources.add(file_path)
+            
+            # Store the interaction in memory if user_id is provided
+            if user_id:
+                from services.graphiti_memory_service import GraphitiMemoryService, Message
+                memory_service = GraphitiMemoryService()
+                
+                # Add user query to memory
+                user_message = Message(
+                    content=query_text,
+                    role_type="user",
+                    source_description="user query"
+                )
+                await memory_service.add_message(user_id, user_message)
+                
+                # Add AI response to memory with sources in the source description
+                source_description = "ai assistant"
+                if sources:
+                    source_list = ", ".join(sources)
+                    source_description = f"ai assistant with sources: {source_list}"
+                
+                ai_message = Message(
+                    content=response_text,
+                    role_type="assistant",
+                    source_description=source_description
+                )
+                await memory_service.add_message(user_id, ai_message)
 
             return ExtendedGraphRAGResponse(
                 answer=response_text,

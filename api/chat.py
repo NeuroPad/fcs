@@ -18,10 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 
-
-
-
-
 router = APIRouter()
 
 graph_rag_service = GraphRAGService()
@@ -109,6 +105,8 @@ async def get_chat_session(
 
     return {
         "id": session.id,
+        "user_id": session.user_id,
+        "title": session.title,
         "created_at": session.created_at,
         "messages": messages
     }
@@ -146,20 +144,53 @@ async def ask_question(
     try:
         chat_service = ChatService(db)
         
+        # Get the session to retrieve user_id
+        session = chat_service.get_chat_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Chat session not found")
+        
+        # Get chat history for context
+        chat_history = []
+        for msg in session.messages:
+            chat_history.append({
+                "role": msg.role,
+                "content": msg.content,
+                "created_at": msg.created_at
+            })
+        
         # Add user message to chat history
         chat_service.add_message_to_session(
             session_id=session_id,
             role="user",
             content=request.text
         )
+        
+        # Add the current message to chat history for context
+        chat_history.append({"role": "user", "content": request.text})
+        
+        # Convert user_id to string for memory service
+        user_id = str(session.user_id)
 
-        # Get response based on mode
+        # Get response based on mode, passing chat history and user_id
         if mode == "normal":
-            response = await multimodal_service.normal_query(request.text)
+            response = await multimodal_service.normal_query(
+                query_text=request.text,
+                chat_history=chat_history,
+                user_id=user_id
+            )
         elif mode == "graph":
-            response = await graph_rag_service.get_answer(request.text)
+            response = await graph_rag_service.get_answer(
+                question=request.text,
+                chat_history=chat_history,
+                user_id=user_id
+            )
         else:  # combined mode
-            response = await multimodal_service.enhanced_query(request.text, top_k=4)
+            response = await multimodal_service.enhanced_query(
+                query_text=request.text,
+                top_k=4,
+                chat_history=chat_history,
+                user_id=user_id
+            )
 
         # Format assistant response
         assistant_content = json.dumps({
