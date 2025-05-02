@@ -156,6 +156,9 @@ export default function Register() {
     //     </div>
     //   </Container>
     // </IonPage>
-    <RegisterOnboard  />
+    <Container width='100%'>
+      <RegisterOnboard  />
+    </Container>
+    
   );
 }
