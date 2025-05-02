@@ -5,6 +5,11 @@ class UserRegisterDTO(BaseModel):
     name: str
     password: str
     role: str = "user"
+    machine_name: str = None
+    contradiction_tolerance: float = None
+    belief_sensitivity: str = None
+    salience_decay_speed: str = "default"
+    
 
 class UserLoginDTO(BaseModel):
     email: str
@@ -12,6 +17,11 @@ class UserLoginDTO(BaseModel):
 
 class EditProfileDTO(BaseModel):
     name: str
+    machine_name: str = None
+    contradiction_tolerance: float = None
+    belief_sensitivity: str = None
+    salience_decay_speed: str = "default"
+    
 
 class ChangePasswordDTO(BaseModel):
     current_password: str

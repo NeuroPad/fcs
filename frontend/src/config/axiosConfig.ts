@@ -1,5 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { get } from "../services/storage";
+import { store } from '../app/store'; // Import the store
+import { logout } from '../features/authSlice'; // Import the logout action
 
 const BASE_URL = 'api/';
 
@@ -33,11 +35,11 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    if (error.response && error.response.status === 403) {
-      localStorage.removeItem('token');
-      window.location.reload();
+    if (error.response && error.response.status === 401) {
+      // Dispatch logout action when token is expired
+      store.dispatch(logout());
+      window.location.reload(); // Reload the page to prompt re-login
     }
-
     return Promise.reject(error);
   }
 );

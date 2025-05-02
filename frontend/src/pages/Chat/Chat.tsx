@@ -33,7 +33,7 @@ const Chat: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   // Changed default mode to 'graph' instead of 'normal'
-  const [queryMode, setQueryMode] = useState<QueryMode>('graph');
+  const [queryMode, setQueryMode] = useState<QueryMode>('normal');
 
   useEffect(() => {
     if (bottomRef.current) {

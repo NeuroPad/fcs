@@ -17,18 +17,18 @@ const Onboarding = () => {
 
   const slides = [
     {
-      title: 'Process Multiple Document Types',
-      description: 'Upload and process PDFs, text files, and images to build your knowledge base',
-      image: '/assets/images/onboarding/docs.png' 
+      title: 'Shape Your Beliefs',
+      description: 'Upload articles, books, thoughts, or documents that influence your worldview — PDFs, text, or web clips are welcome.',
+      image: '/assets/images/onboarding/docs.png'
     },
     {
-      title: 'Knowledge Graph Integration',
-      description: 'Automatically organize information using Neo4j graph database for efficient retrieval',
+      title: 'Connect Your Thoughts',
+      description: 'Everything you share helps us understand how your beliefs connect and grow — like a living map of your thinking.',
       image: '/assets/images/onboarding/knowledgebase.png'
     },
     {
-      title: 'Intelligent Document Search',
-      description: 'Ask questions and find relevant information using advanced RAG with LangChain and LlamaIndex',
+      title: 'Explore Your Thinking',
+      description: 'Ask, challenge, and explore your beliefs using intelligent retrieval and reasoning powered by the FGM engine.',
       image: '/assets/images/onboarding/chat.png'
     },
   ];

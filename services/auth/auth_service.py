@@ -36,11 +36,17 @@ def authenticate_user(db: Session, email: str, password: str):
         return False
     return user
 
-def edit_profile(db: Session, user_id: int, name: str):
+def edit_profile(db: Session, user_id: int, name: str, machine_name: str = None, contradiction_tolerance: float = None, belief_sensitivity: str = None):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return None
     user.name = name
+    if machine_name is not None:
+        user.machine_name = machine_name
+    if contradiction_tolerance is not None:
+        user.contradiction_tolerance = contradiction_tolerance
+    if belief_sensitivity is not None:
+        user.belief_sensitivity = belief_sensitivity
     db.commit()
     db.refresh(user)
     return user

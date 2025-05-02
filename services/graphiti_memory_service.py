@@ -138,7 +138,7 @@ class GraphitiMemoryService:
             
             # Add the episode - let Graphiti handle UUID if not provided
             await self.graphiti.add_episode(
-                uuid=m.uuid,
+                #uuid=m.uuid,
                 group_id=user_id,
                 name=m.name or f"Message-{m.uuid[:8] if m.uuid else 'new'}",
                 episode_body=episode_body,
@@ -175,7 +175,7 @@ class GraphitiMemoryService:
             
             # Add the episode - let Graphiti handle UUID if not provided
             await self.graphiti.add_episode(
-                uuid=m.uuid,
+                #uuid=m.uuid,
                 group_id=user_id,
                 name=m.name or f"Message-{m.uuid[:8] if m.uuid else 'new'}",
                 episode_body=episode_body,
@@ -213,7 +213,7 @@ class GraphitiMemoryService:
         """
         async def add_text_chunk_task(chunk: str, chunk_name: str, chunk_desc: str, chunk_uuid: str = None):
             await self.graphiti.add_episode(
-                uuid=chunk_uuid,  # Let Graphiti handle UUID generation internally
+                #uuid=chunk_uuid,  # Let Graphiti handle UUID generation internally
                 group_id=user_id,
                 name=chunk_name,
                 episode_body=chunk,

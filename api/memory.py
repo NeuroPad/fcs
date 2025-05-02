@@ -34,7 +34,6 @@ async def add_message(user_id: str, message: MessageCreate, service: GraphitiMem
     # Convert from API schema to service model
     msg = Message(
         content=message.content,
-        uuid=str(uuid.uuid4()),
         name=message.name or "",
         role_type=message.role_type,
         role=message.role,
@@ -50,7 +49,7 @@ async def add_message(user_id: str, message: MessageCreate, service: GraphitiMem
     return OperationResponse(
         status=result["status"],
         message=result["message"],
-        data={"uuid": result["uuid"]}
+        #data={"uuid": result["uuid"]}
     )
 
 

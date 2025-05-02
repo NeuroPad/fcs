@@ -32,4 +32,8 @@ class User(Base):
     name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
     role = Column(String, default="user", nullable=False)  # 'admin' or 'user'
+    machine_name = Column(String, nullable=True)  # Name given to the AI by the user
+    contradiction_tolerance = Column(Integer, nullable=True)  # User's tolerance for contradictory information
+    belief_sensitivity = Column(String, nullable=True)  # User's sensitivity to belief challenges (high, moderate, low)
+    salience_decay_speed = Column(String, default="default", nullable=True)  # Controls how quickly belief salience decays
     created_at = Column(DateTime, default=datetime.utcnow)
