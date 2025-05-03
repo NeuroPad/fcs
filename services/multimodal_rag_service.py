@@ -98,6 +98,13 @@ class MultiModalRAGService:
                             logger.info(f"No images found in {subdir}, skipping.")
                     except Exception as e:
                         logger.warning(f"Error loading images from {subdir}: {str(e)}")
+        
+            if not image_documents:
+                logger.error("No image documents found in any artifact directories.")
+                return {
+                    "status": "error",
+                    "message": "No image documents found in any artifact directories."
+                }
 
             # Create and store the index with both document types
             self.index = MultiModalVectorStoreIndex.from_documents(
