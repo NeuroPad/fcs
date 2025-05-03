@@ -92,7 +92,10 @@ class MultiModalRAGService:
                     )
                     try:
                         image_docs = image_reader.load_data()
-                        image_documents.extend(image_docs)
+                        if image_docs:  # Check if there are any images
+                            image_documents.extend(image_docs)
+                        else:
+                            logger.info(f"No images found in {subdir}, skipping.")
                     except Exception as e:
                         logger.warning(f"Error loading images from {subdir}: {str(e)}")
 
