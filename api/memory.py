@@ -220,3 +220,17 @@ async def process_documents(service: GraphitiMemoryService = Depends(get_memory_
             "total_documents": result.get("total_documents", 0)
         }
     )
+
+
+@router.post("/clear-neo4j", response_model=OperationResponse, status_code=status.HTTP_200_OK)
+async def clear_neo4j_data(service: GraphitiMemoryService = Depends(get_memory_service)):
+    """Clear all data in the Neo4j database"""
+    result = await service.clear_neo4j_data()
+    
+    if result["status"] == "error":
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result["message"])
+    
+    return OperationResponse(
+        status=result["status"],
+        message=result["message"]
+    )

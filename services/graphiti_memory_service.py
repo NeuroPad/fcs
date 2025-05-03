@@ -661,6 +661,23 @@ class GraphitiMemoryService:
                 "message": error_msg
             }
     
+    async def clear_neo4j_data(self) -> Dict[str, Any]:
+        """Clear all data in the Neo4j database"""
+        try:
+            with self.graphiti.driver.session() as session:
+                session.run("MATCH (n) DETACH DELETE n")
+                logger.info("Cleared existing graph data")
+            return {
+                "status": "success",
+                "message": "Cleared existing graph data"
+            }
+        except Exception as e:
+            logger.error(f"Error clearing graph data: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Failed to clear graph data: {str(e)}"
+            }
+    
     async def close(self):
         """Close the connection to the graph database"""
         await self.graphiti.close()
