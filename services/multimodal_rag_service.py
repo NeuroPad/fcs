@@ -17,6 +17,7 @@ import chromadb
 from core.config import settings
 from schemas.graph_rag import ExtendedGraphRAGResponse
 from services.store import GraphRAGStore
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,13 @@ class MultiModalRAGService:
             image_documents = []
             for subdir in markdown_dir.glob("*_artifacts"):
                 if subdir.is_dir():
+                    # Check if the directory contains any image files
+                    image_files = list(subdir.glob("*.jpg")) + list(subdir.glob("*.png")) + list(subdir.glob("*.jpeg"))
+                    if not image_files:
+                        logger.info(f"No images found in {subdir}, deleting directory.")
+                        shutil.rmtree(subdir)  # Delete the directory if no image files are found
+                        continue
+
                     image_reader = SimpleDirectoryReader(
                         input_dir=str(subdir),
                         required_exts=[".jpg", ".png", ".jpeg"],
@@ -92,10 +100,7 @@ class MultiModalRAGService:
                     )
                     try:
                         image_docs = image_reader.load_data()
-                        if image_docs:  # Check if there are any images
-                            image_documents.extend(image_docs)
-                        else:
-                            logger.info(f"No images found in {subdir}, skipping.")
+                        image_documents.extend(image_docs)
                     except Exception as e:
                         logger.warning(f"Error loading images from {subdir}: {str(e)}")
         
