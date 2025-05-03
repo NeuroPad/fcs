@@ -3,7 +3,7 @@ import {
   IonPage, IonContent, IonButton, IonInput, IonIcon, IonLoading, IonImg
 } from '@ionic/react';
 import { useForm } from 'react-hook-form';
-import { eyeOutline, eyeOffOutline } from 'ionicons/icons';
+import { eyeOutline, eyeOffOutline, arrowForwardOutline, arrowBackOutline  } from 'ionicons/icons';
 import { Swiper, SwiperSlide, useSwiper } from 'swiper/react';
 import { Pagination } from 'swiper';
 import * as yup from 'yup';
@@ -80,6 +80,8 @@ interface Profile {
   belief_sensitivity: string;
 }
 
+
+
 const RegisterOnboard = () => {
   const [slideIndex, setSlideIndex] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -111,7 +113,7 @@ const RegisterOnboard = () => {
       name: '',
       email: '',
       password: '',
-      confirm_password: ''
+      confirm_password: '',
     },
     resolver: yupResolver(schema)
   });
@@ -190,14 +192,41 @@ const RegisterOnboard = () => {
     const swiper = useSwiper();
     return (
       <IonButton
-        className="next-button"
+        
         onClick={() => swiper.slideNext()}
-        fill="clear"
-        color={'primary'}
+        fill="solid"
+        color="primary"
+        size="small" // Use Ionic's small button size
+        disabled={slideIndex === 0 || slideIndex === questions.length + 1 || !answers[slideIndex - 1]}
       >
-        Next
+        <IonIcon icon={arrowForwardOutline} slot="end" /> Next
       </IonButton>
     );
+  };
+
+  const BackButton = () => {
+    const swiper = useSwiper();
+    return (
+      <IonButton
+       
+        onClick={() => swiper.slidePrev()}
+        fill="solid"
+        color="primary"
+        size="small" 
+      >
+        <IonIcon icon={arrowBackOutline} slot="start" /> Back
+      </IonButton>
+    );
+  };
+
+  const handleMachineNameContinue = () => {
+    if (!machineName) {
+      alert('Machine name is required');
+      return;
+    }
+    if (swiperInstance) {
+      swiperInstance.slideNext();
+    }
   };
 
   return (
@@ -299,14 +328,14 @@ const RegisterOnboard = () => {
             </div>
             <IonInput
               value={machineName}
-              className="styled-input"
+              className={`styled-input ${!machineName ? 'input-error' : ''}`} // Add error class
               onIonChange={(e) => setMachineName(String(e.detail.value || ''))}
               placeholder="Name me..."
             />
             <IonButton
               expand="block"
               className="ion-button-primary"
-              onClick={handleContinue}
+              onClick={handleMachineNameContinue}
             >
               Next
             </IonButton>
@@ -322,12 +351,16 @@ const RegisterOnboard = () => {
                 {question.options.map((opt: QuestionOption, idx) => (
                   <div
                     key={idx}
-                    className="answer-card"
+                    className={`answer-card ${answers[slideIndex - 1] === opt.score ? 'selected' : ''}`}
                     onClick={() => handleAnswer(opt.score, opt.belief)}
                   >
                     {opt.text}
                   </div>
                 ))}
+              </div>
+              <div className="navigation-buttons">
+                <BackButton />
+                <NextButton />
               </div>
             </div>
           </SwiperSlide>
@@ -341,4 +374,8 @@ const RegisterOnboard = () => {
   );
 };
 
+// Add CSS for selected state and button styling
+// .answer-card.selected { background-color: #e0e0e0; }
+// .navigation-buttons { display: flex; justify-content: space-between; }
+// .input-error { border-color: red; }
 export default RegisterOnboard;
