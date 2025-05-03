@@ -34,6 +34,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 KG_TRIPLET_EXTRACT_TMPL = """
 -Goal-
 Analyze any document containing text and images to extract:
