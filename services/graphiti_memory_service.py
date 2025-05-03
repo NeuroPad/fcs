@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 from functools import partial
-
+from neo4j import GraphDatabase
 from pydantic import BaseModel, Field
 from schemas.memory import SearchQuery
 from graphiti_core import Graphiti
@@ -90,6 +90,12 @@ class GraphitiMemoryService:
             uri=settings.NEO4J_URI,
             user=settings.NEO4J_USERNAME,
             password=settings.NEO4J_PASSWORD
+        )
+        
+        # Add direct Neo4j driver
+        self.neo4j_driver = GraphDatabase.driver(
+            settings.NEO4J_URI,
+            auth=(settings.NEO4J_USERNAME, settings.NEO4J_PASSWORD)
         )
         
         # Initialize text splitter for document chunking
@@ -664,7 +670,7 @@ class GraphitiMemoryService:
     async def clear_neo4j_data(self) -> Dict[str, Any]:
         """Clear all data in the Neo4j database"""
         try:
-            with self.graphiti.driver.session() as session:
+            with self.neo4j_driver.session() as session:  # Correct usage of Neo4j driver session
                 session.run("MATCH (n) DETACH DELETE n")
                 logger.info("Cleared existing graph data")
             return {
