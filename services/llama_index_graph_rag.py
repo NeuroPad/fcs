@@ -201,7 +201,7 @@ class GraphRAGService:
             similarity_top_k=10,
         )
 
-    async def get_answer(self, question: str, chat_history: List[dict] = None, user_id: str = None) -> ExtendedGraphRAGResponse:
+    async def get_answer(self, question: str, chat_history: List[dict] = None, user: Dict[str, Any] = None) -> ExtendedGraphRAGResponse:
 
         # Initialize VectorContextRetriever
         vector_retriever = VectorContextRetriever(
@@ -303,7 +303,7 @@ class GraphRAGService:
         logger.debug(f"Processed result: {response}")
         
         # Store the interaction in memory if user_id is provided
-        if user_id:
+        if user and user.get('id'):
             from services.graphiti_memory_service import GraphitiMemoryService, Message
             memory_service = GraphitiMemoryService()
             
@@ -311,6 +311,7 @@ class GraphRAGService:
             user_message = Message(
                 content=question,
                 role_type="user",
+                role=user.get('name', ''),
                 source_description="user query",
                 name=f"user-query-{datetime.now().strftime('%Y%m%d%H%M%S')}"  # Add a unique name
             )

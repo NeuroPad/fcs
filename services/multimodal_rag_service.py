@@ -166,7 +166,7 @@ class MultiModalRAGService:
             logger.error(f"Error querying index: {str(e)}")
             raise
 
-    async def enhanced_query(self, query_text: str, top_k: int = 3, chat_history: List[dict] = None, user_id: str = None) -> ExtendedGraphRAGResponse:
+    async def enhanced_query(self, query_text: str, top_k: int = 3, chat_history: List[dict] = None, user: Dict[str, Any] = None) -> ExtendedGraphRAGResponse:
         try:
             # Ensure the index is initialized.
             if not self.index:
@@ -277,8 +277,8 @@ class MultiModalRAGService:
                         sources.add(file_path)
             
             # Store the interaction in memory if user_id is provided
-            if user_id:
-                logger.info(f"Attempting to store chat in memory for user_id: {user_id}")
+            if user and user.get('id'):
+                logger.info(f"Attempting to store chat in memory for user_id: {user['id']}")
                 try:
                     from services.graphiti_memory_service import GraphitiMemoryService, Message
                     memory_service = GraphitiMemoryService()
@@ -287,10 +287,11 @@ class MultiModalRAGService:
                     user_message = Message(
                         content=query_text,
                         role_type="user",
+                        role=user.get('name', ''),
                         source_description="user query"
                     )
                     logger.info(f"Adding user message to memory: {query_text}")
-                    await memory_service.add_message(user_id, user_message)
+                    await memory_service.add_message(user['id'], user_message)
                     
                     # Add AI response to memory with sources in the source description
                     source_description = "ai assistant"
@@ -321,7 +322,7 @@ class MultiModalRAGService:
             logger.error(f"Error in enhanced query: {str(e)}")
             raise
 
-    async def normal_query(self, query_text: str, top_k: int = 9, chat_history: List[dict] = None, user_id: str = None) -> ExtendedGraphRAGResponse:
+    async def normal_query(self, query_text: str, top_k: int = 9, chat_history: List[dict] = None, user: Dict[str, Any] = None) -> ExtendedGraphRAGResponse:
         try:
             if not self.index:
                 self.index = MultiModalVectorStoreIndex(
@@ -417,7 +418,7 @@ class MultiModalRAGService:
                         sources.add(file_path)
             
             # Store the interaction in memory if user_id is provided
-            if user_id:
+            if user and user.get('id'):
                 from services.graphiti_memory_service import GraphitiMemoryService, Message
                 memory_service = GraphitiMemoryService()
                 
@@ -425,9 +426,11 @@ class MultiModalRAGService:
                 user_message = Message(
                     content=query_text,
                     role_type="user",
-                    source_description="user query"
+                    role=user.get('name', ''),
+                    source_description="user query",
+                    name=f"user-query-{datetime.now().strftime('%Y%m%d%H%M%S')}" 
                 )
-                await memory_service.add_message(user_id, user_message)
+                await memory_service.add_message(user['id'], user_message)
                 
                 # Add AI response to memory with sources in the source description
                 source_description = "ai assistant"
@@ -438,7 +441,8 @@ class MultiModalRAGService:
                 ai_message = Message(
                     content=response_text,
                     role_type="assistant",
-                    source_description=source_description
+                    source_description=source_description,
+                    name=f"ai-response-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 )
                 await memory_service.add_message(user_id, ai_message)
 

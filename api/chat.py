@@ -183,28 +183,31 @@ async def ask_question(
         # Add the current message to chat history for context
         chat_history.append({"role": "user", "content": request.text})
         
-        # Use authenticated user's ID for memory service
-        user_id = str(user.id)
+        # Create user object with id and name
+        user_obj = {
+            'id': str(user.id),
+            'name': user.name
+        }
         
-        # Get response based on mode, passing chat history and user_id
+        # Get response based on mode, passing chat history and user object
         if mode == "normal":
             response = await multimodal_service.normal_query(
                 query_text=request.text,
                 chat_history=chat_history,
-                user_id=user_id
+                user=user_obj
             )
         elif mode == "graph":
             response = await graph_rag_service.get_answer(
                 question=request.text,
                 chat_history=chat_history,
-                user_id=user_id
+                user=user_obj
             )
         else:  # combined mode
             response = await multimodal_service.enhanced_query(
                 query_text=request.text,
                 top_k=4,
                 chat_history=chat_history,
-                user_id=user_id
+                user=user_obj
             )
 
         # Format assistant response
