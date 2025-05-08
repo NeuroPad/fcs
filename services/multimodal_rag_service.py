@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 import logging
 import json
+from datetime import datetime
 from llama_index.core import SimpleDirectoryReader, StorageContext, Document, PromptTemplate
 from llama_index.core.indices import MultiModalVectorStoreIndex
 from llama_index.core.indices.property_graph import VectorContextRetriever
@@ -367,26 +368,23 @@ class MultiModalRAGService:
 
             # Define the prompt template with chat history
             qa_tmpl = PromptTemplate(
-                "Based on the following information:\n"
+                "You are an adaptive AI designed to reason fluidly, weigh confidence continuously, and engage in context-aware interaction.\n\n"
+                "When generating responses:\n"
+                "- Avoid rigid conclusions; maintain useful ambiguity when appropriate\n"
+                "- Prioritize relevance, brevity, and clarity\n"
+                "- Extend beyond the retrieved context only if clearly helpful, and flag assumptions\n"
+                "- Think in gradients, not absolutes—uncertainty can be informative\n"
+                "- Only invite reflection or use examples when necessary to clarify a subtle point\n\n"
                 "---------------------\n"
                 "RETRIEVED CONTEXT:\n"
                 "{multimodal_context}\n"
                 "---------------------\n"
+                "PREVIOUS CHATS:\n"
                 "{chat_context}\n"
                 "---------------------\n"
-                "Using the above context and conversation history (if available), provide a comprehensive response that:\n"
-                "1. Directly addresses all aspects of the query\n"
-                "2. Explains key concepts clearly\n"
-                "3. Uses lists/numbered steps for multi-part information where necessary\n"
-                "4. Provides relevant examples where appropriate\n"
-                "5. Breaks down complex ideas into simpler components\n"
-                "6. Maintains logical flow between ideas\n"
-                "7. Highlights important relationships or patterns\n"
-                "8. States assumptions when necessary\n"
-                "NOTE: answer the query using the context given dont mention the word CONTEXT in your answer\n" 
-                "\n"
+                "Respond to the following query with precision and adaptability:\n"
                 "Query: {query_str}\n"
-                "Answer: "
+                "Answer:"
             )
 
             # Call the LLM with the formatted prompt
@@ -444,7 +442,7 @@ class MultiModalRAGService:
                     source_description=source_description,
                     name=f"ai-response-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 )
-                await memory_service.add_message(user_id, ai_message)
+                await memory_service.add_message(user['id'], ai_message)
 
             return ExtendedGraphRAGResponse(
                 answer=response_text,
