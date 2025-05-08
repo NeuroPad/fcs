@@ -5,6 +5,7 @@ from db.session import get_db
 from schemas.chat import ChatSessionResponse, ChatMessageCreate, QuestionRequest
 from schemas.graph_rag import ExtendedGraphRAGResponse
 from utils.file_utils import save_chat_image
+from services.auth.auth_service import get_user_from_token
 from typing import List, Optional
 import json
 from core.config import settings
@@ -136,18 +137,32 @@ async def add_message_to_chat(
 
 @router.post("/session/{session_id}/ask")
 async def ask_question(
-    session_id: int,  # Change to int since that's what our DB uses
+    session_id: int,
     request: QuestionRequest,
     mode: str = Query("normal", enum=["normal", "graph", "combined"]),
-    db: Session = Depends(get_db)  # Add database dependency
+    db: Session = Depends(get_db),
+    current_request: Request = None
 ):
     try:
         chat_service = ChatService(db)
         
-        # Get the session to retrieve user_id
+        # Get user from token
+        auth_header = current_request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        token = auth_header.split(" ")[1]
+        user, error = get_user_from_token(db, token)
+        if error:
+            raise HTTPException(status_code=401 if error == "Invalid token" else 404, detail=error)
+        
+        # Get the session
         session = chat_service.get_chat_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Chat session not found")
+        
+        # Verify session belongs to authenticated user
+        if session.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to access this chat session")
         
         # Get chat history for context
         chat_history = []
@@ -168,9 +183,9 @@ async def ask_question(
         # Add the current message to chat history for context
         chat_history.append({"role": "user", "content": request.text})
         
-        # Convert user_id to string for memory service
-        user_id = str(session.user_id)
-
+        # Use authenticated user's ID for memory service
+        user_id = str(user.id)
+        
         # Get response based on mode, passing chat history and user_id
         if mode == "normal":
             response = await multimodal_service.normal_query(
