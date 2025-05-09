@@ -44,7 +44,7 @@ def login(user: UserLoginDTO, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     access_token = create_access_token(
         data={"sub": auth_user.email},
-        expires_delta=timedelta(minutes=30)
+        expires_delta=timedelta(days=30)
     )
     # Return user info without password
     user_data = {
