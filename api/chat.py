@@ -10,10 +10,9 @@ from typing import List, Optional
 import json
 from core.config import settings
 import logging
-
-from services.multimodal_rag_service import MultiModalRAGService
-from services.llama_index_graph_rag import GraphRAGService
 from services.auth.auth_service import get_user_from_token
+from services.rag_service import RAGService # Added import
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +20,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-graph_rag_service = GraphRAGService()
-multimodal_service = MultiModalRAGService(chroma_db_path=str(settings.CHROMA_DB_DIR))
 
 async def get_base_url(request: Request) -> str:
     return str(request.base_url).rstrip('/')
@@ -191,24 +188,19 @@ async def ask_question(
         
         # Get response based on mode, passing chat history and user object
         if mode == "normal":
-            response = await multimodal_service.normal_query(
+            # Initialize RAGService for normal mode
+            rag_service = RAGService(
+                pinecone_api_key=settings.PINECONE_API_KEY,
+                pinecone_environment=settings.PINECONE_ENVIRONMENT
+            )
+            response = await rag_service.query(
                 query_text=request.text,
+                user_id=user.id, # Pass user_id directly
                 chat_history=chat_history,
-                user=user_obj
+                user=user_obj # Pass the user dictionary for memory
             )
-        elif mode == "graph":
-            response = await graph_rag_service.get_answer(
-                question=request.text,
-                chat_history=chat_history,
-                user=user_obj
-            )
-        else:  # combined mode
-            response = await multimodal_service.enhanced_query(
-                query_text=request.text,
-                top_k=4,
-                chat_history=chat_history,
-                user=user_obj
-            )
+        
+        
 
         # Format assistant response
         assistant_content = json.dumps({

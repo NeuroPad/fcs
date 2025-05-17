@@ -1,0 +1,596 @@
+# LlamaIndex
+
+> Using LlamaIndex and Pinecone to build semantic search and RAG applications
+
+export const PrimarySecondaryCTA = ({primaryLabel, primaryHref, primaryTarget, secondaryLabel, secondaryHref, secondaryTarget}) => <div style={{
+  display: 'flex',
+  alignItems: 'center',
+  gap: 16
+}}>
+   {primaryLabel && primaryHref && <div style={{
+  width: 'fit-content',
+  height: 42,
+  background: 'var(--brand-blue)',
+  borderRadius: 4,
+  overflow: 'hidden',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  alignItems: 'center',
+  display: 'inline-flex'
+}}>
+      <a href={primaryHref} target={primaryTarget} style={{
+  paddingLeft: 22,
+  paddingRight: 22,
+  paddingTop: 8,
+  paddingBottom: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+  gap: 4,
+  display: 'inline-flex',
+  textDecoration: 'none',
+  borderBottom: 'none'
+}}>
+        <div style={{
+  textAlign: 'justify',
+  color: 'var(--text-contrast)',
+  fontSize: 15,
+  fontWeight: '600',
+  letterSpacing: 0.46,
+  wordWrap: 'break-word'
+}}>
+          {primaryLabel}
+        </div>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{
+  marginLeft: 2
+}}>
+          <path d="M9.70492 6L8.29492 7.41L12.8749 12L8.29492 16.59L9.70492 18L15.7049 12L9.70492 6Z" fill="white" style={{
+  fille: "var(--text-contrast)"
+}} />
+        </svg>
+      </a>
+    </div>}
+
+    {secondaryLabel && secondaryHref && <div style={{
+  width: 'fit-content',
+  height: 42,
+  borderRadius: 4,
+  overflow: 'hidden',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  alignItems: 'center',
+  display: 'inline-flex',
+  textDecoration: 'none'
+}}>
+        <a href={secondaryHref} target={secondaryTarget} style={{
+  paddingLeft: 11,
+  paddingRight: 11,
+  paddingTop: 8,
+  paddingBottom: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+  gap: 8,
+  display: 'inline-flex',
+  textDecoration: 'none',
+  borderBottom: 'none'
+}}>
+          <div style={{
+  textAlign: 'justify',
+  color: 'var(--brand-blue)',
+  fontSize: 15,
+  fontWeight: '600',
+  letterSpacing: 0.46,
+  wordWrap: 'break-word'
+}}>
+            {secondaryLabel}
+          </div>
+        </a>
+      </div>}
+
+  </div>;
+
+LlamaIndex is a framework for connecting data sources to LLMs, with its chief use case being the end-to-end development of retrieval augmented generation (RAG) applications. LlamaIndex provides the essential abstractions to more easily ingest, structure, and access private or domain-specific data in order to inject these safely and reliably into LLMs for more accurate text generation. It’s available in Python and Typescript.
+
+Seamlessly integrate Pinecone vector database with LlamaIndex to build semantic search and RAG applications.
+
+<PrimarySecondaryCTA secondaryHref={"#setup-guide"} secondaryLabel={"View setup guide"} />
+
+## Setup guide
+
+[View source](https://github.com/pinecone-io/examples/blob/master/learn/generation/llama-index/using-llamaindex-with-pinecone.ipynb)
+
+[Open in Colab](https://colab.research.google.com/github/pinecone-io/examples/blob/master/learn/generation/llama-index/using-llamaindex-with-pinecone.ipynb)
+
+[LlamaIndex](https://www.llamaindex.ai/) is a framework for connecting data sources to LLMs, with its chief use case being the end-to-end development of [RAG applications](https://www.pinecone.io/learn/retrieval-augmented-generation/). Compared to other similar frameworks, LlamaIndex offers a wide variety of tools for pre- and post-processing your data.
+
+This guide shows you how to use LlamaIndex and Pinecone to both perform traditional semantic search and build a RAG pipeline. Specifically, you will:
+
+* Load, transform, and vectorize sample data with LlamaIndex
+* Index and store the vectorized data in Pinecone
+* Search the data in Pinecone and use the results to augment an LLM call
+* Evaluate the answer you get back from the LLM
+
+<Note>
+  This guide demonstrates only one way out of many that you can use LlamaIndex as part of a RAG pipeline. See LlamaIndex's section on [Advanced RAG](https://docs.llamaindex.ai/en/stable/optimizing/advanced%5Fretrieval/advanced%5Fretrieval.html) to learn more about what's possible.
+</Note>
+
+### Set up your environment
+
+Before you begin, install some necessary libraries and set environment variables for your Pinecone and OpenAI API keys:
+
+```Shell Shell
+# Install libraries
+pip install -qU \
+    "pinecone[grpc]"==5.1.0 \
+    llama-index==0.11.4 \
+    llama-index-vector-stores-pinecone==0.2.1 \
+    llama-index-readers-file==0.2.0 \
+    arxiv==2.1.3 \
+    setuptools  # (Optional)
+```
+
+```Shell Shell
+# Set environment variables for API keys
+export PINECONE_API_KEY=<your Pinecone API key available at app.pinecone.io>
+export OPENAI_API_KEY=<your OpenAI API key, available at platform.openai.com/api-keys>
+pinecone_api_key = os.environ.get('PINECONE_API_KEY')
+openai_api_key = os.environ.get('OPENAI_API_KEY')
+```
+
+Also note that all code on this page is run on Python 3.11.
+
+### Load the data
+
+In this guide, you will use the [canonical HNSW paper](https://arxiv.org/pdf/1603.09320.pdf) by Yuri Malkov (PDF) as your sample dataset. Your first step is to download the PDF from arXiv.org and load it into a LlamaIndex loader called [PDF Loader](https://llamahub.ai/l/file-pdf?from=all). This Loader is available (along with many more) on the [LlamaHub](https://llamahub.ai/), which is a directory of data loaders.
+
+```Python Python
+import arxiv
+from pathlib import Path
+from llama_index.readers.file import PDFReader
+
+# Download paper to local file system (LFS)
+# `id_list` contains 1 item that matches our PDF's arXiv ID
+paper = next(arxiv.Client().results(arxiv.Search(id_list=["1603.09320"])))
+paper.download_pdf(filename="hnsw.pdf")
+
+# Instantiate `PDFReader` from LlamaHub
+loader = PDFReader()
+
+# Load HNSW PDF from LFS
+documents = loader.load_data(file=Path('./hnsw.pdf'))
+
+# Preview one of our documents
+documents[0]
+# Response:
+# Document(id_='e25106d2-bde5-41f0-83fa-5cbfa8234bef', embedding=None, metadata={'page_label': '1', 'file_name': 'hnsw.pdf'}, excluded_embed_metadata_keys=[], excluded_llm_metadata_keys=[], relationships={}, text="IEEE TRANSACTIONS ON  JOURNAL NAME,  MANUS CRIPT ID  1 \n Efficient and robust approximate nearest \nneighbor search using Hierarchical Navigable \nSmall World graphs  \nYu. A. Malkov,  D. A. Yashunin  \nAbstract  — We present a new approach for the approximate K -nearest neighbor search based on navigable small world \ngraphs with controllable hierarchy (Hierarchical NSW , HNSW ) and tree alg o-\nrithms", start_char_idx=None, end_char_idx=None, text_template='{metadata_str}\n\n{content}', metadata_template='{key}: {value}', metadata_seperator='\n')
+```
+
+You can see above that each `Document` has a ton of useful information, but depending on which Loader you choose, you may have to clean your data. In this case, you need to remove things like remaining `\n` characters and broken, hyphenated words (e.g., `alg o-\nrithms` → `algorithms`).
+
+```Python Python
+# Clean up our Documents' content
+import re
+
+def clean_up_text(content: str) -> str:
+    """
+    Remove unwanted characters and patterns in text input.
+
+    :param content: Text input.
+    
+    :return: Cleaned version of original text input.
+    """
+
+    # Fix hyphenated words broken by newline
+    content = re.sub(r'(\w+)-\n(\w+)', r'\1\2', content)
+
+    # Remove specific unwanted patterns and characters
+    unwanted_patterns = [
+        "\\n", "  —", "——————————", "—————————", "—————",
+        r'\\u[\dA-Fa-f]{4}', r'\uf075', r'\uf0b7'
+    ]
+    for pattern in unwanted_patterns:
+        content = re.sub(pattern, "", content)
+
+    # Fix improperly spaced hyphenated words and normalize whitespace
+    content = re.sub(r'(\w)\s*-\s*(\w)', r'\1-\2', content)
+    content = re.sub(r'\s+', ' ', content)
+
+    return content
+
+# Call function
+cleaned_docs = []
+for d in documents: 
+    cleaned_text = clean_up_text(d.text)
+    d.text = cleaned_text
+    cleaned_docs.append(d)
+
+# Inspect output
+cleaned_docs[0].get_content()
+# Response:
+# "IEEE TRANSACTIONS ON JOURNAL NAME, MANUS CRIPT ID 1 Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs Yu. A. Malkov, D. A. Yashunin Abstract We present a new approach for the approximate K-nearest neighbor search based on navigable small world graphs with controllable hierarchy (Hierarchical NSW , HNSW ) and tree algorithms."
+
+# Great!
+```
+
+The value-add of using a file loader from LlamaHub is that your PDF is already broken down into LlamaIndex [Documents](https://docs.llamaindex.ai/en/stable/module%5Fguides/loading/documents%5Fand%5Fnodes/root.html#documents-nodes). Along with each Document object comes a [customizable](https://docs.llamaindex.ai/en/stable/module%5Fguides/loading/documents%5Fand%5Fnodes/usage%5Fdocuments.html#metadata) metadata dictionary and a hash ID, among other useful artifacts.
+
+### Transform the data
+
+#### Metadata
+
+Now, if you look at one of your cleaned Document objects, you'll see that the default values in your metadata dictionary are not particularly useful.
+
+```Python Python
+cleaned_docs[0].metadata
+# Response:
+# {'page_label': '1', 'file_name': 'hnsw.pdf'}
+```
+
+To add some metadata that would be more helpful, let's add author name and the paper's title. Note that whatever metadata you add to the metadata dictionary will apply to all [Nodes](https://docs.llamaindex.ai/en/stable/module%5Fguides/loading/documents%5Fand%5Fnodes/root.html#nodes), so you want to keep your additions high-level.
+
+<Note>
+  LlamaIndex also provides [advanced customizations](https://docs.llamaindex.ai/en/stable/module%5Fguides/loading/documents%5Fand%5Fnodes/usage%5Fdocuments.html#advanced-metadata-customization) for what metadata the LLM can see vs the embedding, etc.
+</Note>
+
+```Python Python
+# Iterate through `documents` and add our new key:value pairs
+metadata_additions = {"authors": ["Yu. A. Malkov", "D. A. Yashunin"],
+  "title": "Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs"}
+
+ # Update dict in place
+[cd.metadata.update(metadata_additions) for cd in cleaned_docs]
+ 
+# Let\'s confirm everything worked:
+cleaned_docs[0].metadata
+# Response:
+# {'page_label': '1',
+#      'file_name': 'hnsw.pdf',
+#      'authors': ['Yu. A. Malkov', 'D. A. Yashunin'],
+#      'title': 'Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs'}
+
+# Great!
+```
+
+#### Ingestion pipeline
+
+The easiest way to turn your data into indexable vectors and put those into Pinecone is to make what's called an [Ingestion Pipeline](https://docs.llamaindex.ai/en/stable/module%5Fguides/loading/ingestion%5Fpipeline/root.html). Ingestion Pipelines are how you will build a pipeline that will take your list of Documents, parse them into Nodes (or “[chunks](https://www.pinecone.io/learn/chunking-strategies/)” in non-LlamaIndex contexts), vectorize each Node's content, and upsert them into Pinecone.
+
+In the following pipeline, you'll use one of LlamaIndex's newer parsers: the [SemanticSplitterNodeParser](https://docs.llamaindex.ai/en/stable/module%5Fguides/loading/node%5Fparsers/modules.html#semanticsplitternodeparser), which uses OpenAI's [ada-002 embedding model](https://github.com/run-llama/llama%5Findex/blob/47b34d1fdfde2ded134a373b620c3e7a694e8380/llama%5Findex/embeddings/openai.py#L216) to split Documents into semantically coherent Nodes.
+
+This step uses the OpenAI API key you set as an environment variable [earlier](#set-up-your-environment).
+
+```Python Python
+import os
+
+from llama_index.node_parser import SemanticSplitterNodeParser
+from llama_index.embeddings import OpenAIEmbedding
+from llama_index.ingestion import IngestionPipeline
+
+# This will be the model we use both for Node parsing and for vectorization
+embed_model = OpenAIEmbedding(api_key=openai_api_key)
+
+# Define the initial pipeline
+pipeline = IngestionPipeline(
+    transformations=[
+        SemanticSplitterNodeParser(
+            buffer_size=1,
+            breakpoint_percentile_threshold=95, 
+            embed_model=embed_model,
+            ),
+        embed_model,
+        ],
+    )
+```
+
+Hold off on running this pipeline; you will modify it below.
+
+### Upsert the data
+
+Above, you defined an Ingestion Pipeline. There's one thing missing, though: a vector database into which you can upsert your transformed data.
+
+LlamaIndex lets you declare a [VectorStore](https://docs.llamaindex.ai/en/stable/examples/vector%5Fstores/pinecone%5Fmetadata%5Ffilter.html) and add that right into the pipeline for super easy ingestion. Let's do that with Pinecone below.
+
+This step uses the Pinecone API key you set as an environment variable [earlier](#set-up-your-environment).
+
+```Python Python
+from pinecone.grpc import PineconeGRPC
+from pinecone import ServerlessSpec
+
+from llama_index.vector_stores.pinecone import PineconeVectorStore
+
+# Initialize connection to Pinecone
+pc = PineconeGRPC(api_key=pinecone_api_key)
+index_name = "llama-integration-example"
+
+# Create your index (can skip this step if your index already exists)
+pc.create_index(
+    index_name,
+    dimension=1536,
+    spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+)
+
+# Initialize your index 
+pinecone_index = pc.Index(index_name)
+
+# Initialize VectorStore
+vector_store = PineconeVectorStore(pinecone_index=pinecone_index)
+```
+
+With your PineconeVectorStore now initialized, you can pop that into your `pipeline` and run it.
+
+```Python Python
+# Our pipeline with the addition of our PineconeVectorStore
+pipeline = IngestionPipeline(
+    transformations=[
+        SemanticSplitterNodeParser(
+            buffer_size=1,
+            breakpoint_percentile_threshold=95, 
+            embed_model=embed_model,
+            ),
+        embed_model,
+        ],
+        vector_store=vector_store  # Our new addition
+    )
+
+# Now we run our pipeline!
+pipeline.run(documents=cleaned_docs)
+```
+
+Now ensure your index is up and running with some Pinecone-native methods like `.describe_index_stats()`:
+
+```Python Python
+pinecone_index.describe_index_stats()
+
+# Response:
+# {'dimension': 1536,
+# 'index_fullness': 0.0,
+# 'namespaces': {'': {'vector_count': 46}},
+# 'total_vector_count': 46}
+```
+
+Awesome, your index now has vectors in it. Since you have 46 vectors, you can infer that your `SemanticSplitterNodeParser` split your list of Documents into 46 Nodes.
+
+#### Query the data
+
+To fetch search results from Pinecone itself, you need to make a [VectorStoreIndex](https://docs.llamaindex.ai/en/stable/module%5Fguides/indexing/vector%5Fstore%5Findex.html) object and a [VectorIndexRetriever](https://github.com/run-llama/llama%5Findex/blob/main/llama%5Findex/indices/vector%5Fstore/retrievers/retriever.py#L21) object. You can then pass natural language queries to your Pinecone index and receive results.
+
+```Python Python
+from llama_index.core import VectorStoreIndex
+from llama_index.core.retrievers import VectorIndexRetriever
+
+# Instantiate VectorStoreIndex object from your vector_store object
+vector_index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
+
+# Grab 5 search results
+retriever = VectorIndexRetriever(index=vector_index, similarity_top_k=5)
+
+# Query vector DB
+answer = retriever.retrieve('How does logarithmic complexity affect graph construction?')
+
+# Inspect results
+print([i.get_content() for i in answer])
+
+# Response:
+# ['some relevant search result 1', 'some relevant search result 1'...]
+```
+
+These search results can now be plugged into any downstream task you want.
+
+One of the most common ways to use vector database search results is as additional context to augment a query sent to an LLM. This workflow is what's commonly referred to as a [RAG application](https://www.pinecone.io/learn/retrieval-augmented-generation/).
+
+### Build a RAG app with the data
+
+Building a RAG app with LlamaIndex is very simple.
+
+In theory, you could create a simple [Query Engine](https://docs.llamaindex.ai/en/stable/module%5Fguides/deploying/query%5Fengine/usage%5Fpattern.html#usage-pattern) out of your `vector_index` object by calling `vector_index.as_query_engine().query(‘some query')`, but then you wouldn't be able to specify the number of Pinecone search results you'd like to use as context.
+
+To control how many search results your RAG app uses from your Pinecone index, you will instead create your Query Engine using the [RetrieverQueryEngine](https://github.com/run-llama/llama%5Findex/blob/main/llama%5Findex/query%5Fengine/retriever%5Fquery%5Fengine.py#L21) class. This class allows you to pass in the `retriever` created above, which you configured to retrieve the top 5 search results.
+
+```Python Python
+from llama_index.core.query_engine import RetrieverQueryEngine
+
+# Pass in your retriever from above, which is configured to return the top 5 results
+query_engine = RetrieverQueryEngine(retriever=retriever)
+
+# Now you query:
+llm_query = query_engine.query('How does logarithmic complexity affect graph construction?')
+
+llm_query.response
+# Response:
+# 'Logarithmic complexity in graph construction affects the construction process by organizing the graph into different layers based on their length scale. This separation of links into layers allows for efficient and scalable routing in the graph. The construction algorithm starts from the top layer, which contains the longest links, and greedily traverses through the elements until a local minimum is reached. Then, the search switches to the lower layer with shorter links, and the process repeats. By keeping the maximum number of connections per element constant in all layers, the routing complexity in the graph scales logarithmically. This logarithmic complexity is achieved by assigning an integer level to each element, determining the maximum layer it belongs to. The construction algorithm incrementally builds a proximity graph for each layer, consisting of "short" links that approximate the Delaunay graph. Overall, logarithmic complexity in graph construction enables efficient and robust approximate nearest neighbor search.'
+```
+
+You can even inspect the context (Nodes) that informed your LLM's answer using the `.source_nodes` attribute. Let's inspect the first Node:
+
+```Python Python
+llm_response_source_nodes = [i.get_content() for i in llm_query.source_nodes]
+
+llm_response_source_nodes
+# Response:
+# ["AUTHOR ET AL.: TITL E 7 be auto-configured by using sample data. The construction process can be easily and efficiently parallelized with only few synchronization points (as demonstrated in Fig. 9) and no measurable effect on index quality. Construction speed/index q uality tradeoff is co ntrolled via the efConstruction parameter. The tradeoff between the search time and the index construction time is presented in Fig. 10 for a 10M SIFT dataset and shows that a reasonable quality index can be constructed for efConstruct ion=100 on a 4X 2.4 GHz 10-core X..."]
+```
+
+### Evaluate the data
+
+Now that you've made a RAG app and queried your LLM, you need to evaluate its response.
+
+With LlamaIndex, there are [many ways](https://docs.llamaindex.ai/en/module%5Fguides/evaluating/usage%5Fpattern.html#) to evaluate the results your RAG app generates. A great way to get started with evaluation is to confirm (or deny) that your LLM's responses are relevant, given the context retrieved from your vector database. To do this, you can use LlamaIndex's [RelevancyEvaluator](https://docs.llamaindex.ai/en/stable/examples/evaluation/relevancy%5Feval.html#relevancy-evaluator) class.
+
+The great thing about this type of evaluation is that there is no need for [ground truth data](https://dtunkelang.medium.com/evaluating-search-using-human-judgement-fbb2eeba37d9) (i.e., labeled datasets to compare answers with).
+
+```Python Python
+from llama_index.core.evaluation import RelevancyEvaluator
+
+# (Need to avoid peripheral asyncio issues)
+import nest_asyncio
+nest_asyncio.apply()
+
+# Define evaluator
+evaluator = RelevancyEvaluator()
+
+# Issue query
+llm_response = query_engine.query(
+    "How does logarithmic complexity affect graph construction?"
+)
+
+# Grab context used in answer query & make it pretty
+llm_response_source_nodes = [i.get_content() for i in llm_response.source_nodes]
+
+# # Take your previous question and pass in the response youwe got above
+eval_result = evaluator.evaluate_response(query="How does logarithmic complexity affect graph construction?", response=llm_response)
+
+# Print response
+print(f'\nGiven the {len(llm_response_source_nodes)} chunks of content (below), is your \     
+        LLM\'s response relevant? {eval_result.passing}\n \
+        \n ----Contexts----- \n \
+        \n{llm_response_source_nodes}')
+# Response:
+# "Given the 5 chunks of content (below), is your LLM's response relevant? True
+         
+#  ----Contexts----- 
+         
+# ['AUTHOR ET AL.: TITL E 7 be auto-configured by using sample data. The construction process can be easily and efficiently parallelized with only few synchronization points (as demonstrated in Fig...']"
+```
+
+You can see that there are various attributes you can inspect on your evaluator's result in order to ascertain what's going on behind the scenes. To get a quick binary True/False signal as to whether your LLM is producing relevant results given your context, inspect the `.passing` attribute.
+
+Let's see what happens when we send a totally out of scope query through your RAG app. Issue a random query you know your RAG app won't be able to answer, given what's in your index:
+
+```Python Python
+query = "Why did the chicken cross the road?"
+response = query_engine.query(query)
+
+print(response.response)
+# Response:
+# "I'm sorry, but I cannot answer that question based on the given context information."
+
+# Evaluate
+eval_result = evaluator.evaluate_response(query=query, response=response)
+
+print(str(eval_result.passing))
+# Response:
+# False  # Our LLM is not taking our context into account, as expected :)
+```
+
+As expected, when you send an out-of-scope question through your RAG pipeline, your evaluator says the LLM's answer is not relevant to the retrieved context.
+
+### Summary
+
+As you have seen, LlamaIndex is a powerful framework to use when building semantic search and RAG applications – and we have only gotten to the tip of the iceberg! [Explore more](https://docs.llamaindex.ai/en/index.html) on your own and [let us know how it goes](https://community.pinecone.io/).
+
+
+Pinecone Vector Store
+If you're opening this Notebook on colab, you will probably need to install LlamaIndex 🦙.
+
+%pip install llama-index llama-index-vector-stores-pinecone
+import logging
+import sys
+import os
+
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
+Creating a Pinecone Index
+from pinecone import Pinecone, ServerlessSpec
+os.environ["PINECONE_API_KEY"] = "..."
+os.environ["OPENAI_API_KEY"] = "sk-proj-..."
+
+api_key = os.environ["PINECONE_API_KEY"]
+
+pc = Pinecone(api_key=api_key)
+# delete if needed
+# pc.delete_index("quickstart")
+# dimensions are for text-embedding-ada-002
+
+pc.create_index(
+    name="quickstart",
+    dimension=1536,
+    metric="euclidean",
+    spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+)
+
+# If you need to create a PodBased Pinecone index, you could alternatively do this:
+#
+# from pinecone import Pinecone, PodSpec
+#
+# pc = Pinecone(api_key='xxx')
+#
+# pc.create_index(
+# 	 name='my-index',
+# 	 dimension=1536,
+# 	 metric='cosine',
+# 	 spec=PodSpec(
+# 		 environment='us-east1-gcp',
+# 		 pod_type='p1.x1',
+# 		 pods=1
+# 	 )
+# )
+#
+pinecone_index = pc.Index("quickstart")
+Load documents, build the PineconeVectorStore and VectorStoreIndex
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+from llama_index.vector_stores.pinecone import PineconeVectorStore
+from IPython.display import Markdown, display
+Download Data
+
+!mkdir -p 'data/paul_graham/'
+!wget 'https://raw.githubusercontent.com/run-llama/llama_index/main/docs/docs/examples/data/paul_graham/paul_graham_essay.txt' -O 'data/paul_graham/paul_graham_essay.txt'
+# load documents
+documents = SimpleDirectoryReader("./data/paul_graham").load_data()
+# initialize without metadata filter
+from llama_index.core import StorageContext
+
+if "OPENAI_API_KEY" not in os.environ:
+    raise EnvironmentError(f"Environment variable OPENAI_API_KEY is not set")
+
+vector_store = PineconeVectorStore(pinecone_index=pinecone_index)
+storage_context = StorageContext.from_defaults(vector_store=vector_store)
+index = VectorStoreIndex.from_documents(
+    documents, storage_context=storage_context
+)
+Query Index
+May take a minute or so for the index to be ready!
+
+# set Logging to DEBUG for more detailed outputs
+query_engine = index.as_query_engine()
+response = query_engine.query("What did the author do growing up?")
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+display(Markdown(f"<b>{response}</b>"))
+The author, growing up, worked on writing and programming. They wrote short stories and tried writing programs on an IBM 1401 computer. They later got a microcomputer and started programming more extensively, writing simple games and a word processor.
+
+Filtering
+You can also fetch a list of nodes directly with filters.
+
+from llama_index.core.vector_stores.types import (
+    MetadataFilter,
+    MetadataFilters,
+    FilterOperator,
+    FilterCondition,
+)
+
+filter = MetadataFilters(
+    filters=[
+        MetadataFilter(
+            key="file_path",
+            value="/Users/loganmarkewich/giant_change/llama_index/docs/docs/examples/vector_stores/data/paul_graham/paul_graham_essay.txt",
+            operator=FilterOperator.EQ,
+        )
+    ],
+    condition=FilterCondition.AND,
+)
+You can fetch nodes directly with the filters. The below will return all nodes that match the filter.
+
+nodes = vector_store.get_nodes(filters=filter, limit=100)
+print(len(nodes))
+22
+You can also fetch using top-k and filters.
+
+query_engine = index.as_query_engine(similarity_top_k=2, filters=filter)
+response = query_engine.query("What did the author do growing up?")
+print(len(response.source_nodes))
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2

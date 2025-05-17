@@ -1,0 +1,290 @@
+Multitenancy with LlamaIndex
+If you are building a service that serves vectors for many independent users, and you want to isolate their data, the best practice is to use a single collection with payload-based partitioning. This approach is called multitenancy. Our guide on the Separate Partitions describes how to set it up in general, but if you use LlamaIndex as a backend, you may prefer reading a more specific instruction. So here it is!
+
+Prerequisites
+This tutorial assumes that you have already installed Qdrant and LlamaIndex. If you haven’t, please run the following commands:
+
+pip install llama-index llama-index-vector-stores-qdrant
+
+We are going to use a local Docker-based instance of Qdrant. If you want to use a remote instance, please adjust the code accordingly. Here is how we can start a local instance:
+
+docker run -d --name qdrant -p 6333:6333 -p 6334:6334 qdrant/qdrant:latest
+
+Setting up LlamaIndex pipeline
+We are going to implement an end-to-end example of multitenant application using LlamaIndex. We’ll be indexing the documentation of different Python libraries, and we definitely don’t want any users to see the results coming from a library they are not interested in. In real case scenarios, this is even more dangerous, as the documents may contain sensitive information.
+
+Creating vector store
+QdrantVectorStore is a wrapper around Qdrant that provides all the necessary methods to work with your vector database in LlamaIndex. Let’s create a vector store for our collection. It requires setting a collection name and passing an instance of QdrantClient.
+
+from qdrant_client import QdrantClient
+from llama_index.vector_stores.qdrant import QdrantVectorStore
+
+
+client = QdrantClient("http://localhost:6333")
+
+vector_store = QdrantVectorStore(
+    collection_name="my_collection",
+    client=client,
+)
+
+Defining chunking strategy and embedding model
+Any semantic search application requires a way to convert text queries into vectors - an embedding model. ServiceContext is a bundle of commonly used resources used during the indexing and querying stage in any LlamaIndex application. We can also use it to set up an embedding model - in our case, a local BAAI/bge-small-en-v1.5. set up
+
+from llama_index.core import ServiceContext
+
+service_context = ServiceContext.from_defaults(
+    embed_model="local:BAAI/bge-small-en-v1.5",
+)
+
+Note, in case you are using Large Language Model different from OpenAI’s ChatGPT, you should specify llm parameter for ServiceContext.
+
+We can also control how our documents are split into chunks, or nodes using LLamaIndex’s terminology. The SimpleNodeParser splits documents into fixed length chunks with an overlap. The defaults are reasonable, but we can also adjust them if we want to. Both values are defined in tokens.
+
+from llama_index.core.node_parser import SimpleNodeParser
+
+node_parser = SimpleNodeParser.from_defaults(chunk_size=512, chunk_overlap=32)
+
+Now we also need to inform the ServiceContext about our choices:
+
+service_context = ServiceContext.from_defaults(
+    embed_model="local:BAAI/bge-large-en-v1.5",
+    node_parser=node_parser,
+)
+
+Both embedding model and selected node parser will be implicitly used during the indexing and querying.
+
+Combining everything together
+The last missing piece, before we can start indexing, is the VectorStoreIndex. It is a wrapper around VectorStore that provides a convenient interface for indexing and querying. It also requires a ServiceContext to be initialized.
+
+from llama_index.core import VectorStoreIndex
+
+index = VectorStoreIndex.from_vector_store(
+    vector_store=vector_store, service_context=service_context
+)
+
+Indexing documents
+No matter how our documents are generated, LlamaIndex will automatically split them into nodes, if required, encode using selected embedding model, and then store in the vector store. Let’s define some documents manually and insert them into Qdrant collection. Our documents are going to have a single metadata attribute - a library name they belong to.
+
+from llama_index.core.schema import Document
+
+documents = [
+    Document(
+        text="LlamaIndex is a simple, flexible data framework for connecting custom data sources to large language models.",
+        metadata={
+            "library": "llama-index",
+        },
+    ),
+    Document(
+        text="Qdrant is a vector database & vector similarity search engine.",
+        metadata={
+            "library": "qdrant",
+        },
+    ),
+]
+
+Now we can index them using our VectorStoreIndex:
+
+for document in documents:
+    index.insert(document)
+
+Performance considerations
+Our documents have been split into nodes, encoded using the embedding model, and stored in the vector store. However, we don’t want to allow our users to search for all the documents in the collection, but only for the documents that belong to a library they are interested in. For that reason, we need to set up the Qdrant payload index, so the search is more efficient.
+
+from qdrant_client import models
+
+client.create_payload_index(
+    collection_name="my_collection",
+    field_name="metadata.library",
+    field_type=models.PayloadSchemaType.KEYWORD,
+)
+
+The payload index is not the only thing we want to change. Since none of the search queries will be executed on the whole collection, we can also change its configuration, so the HNSW graph is not built globally. This is also done due to performance reasons. You should not be changing these parameters, if you know there will be some global search operations done on the collection.
+
+client.update_collection(
+    collection_name="my_collection",
+    hnsw_config=models.HnswConfigDiff(payload_m=16, m=0),
+)
+
+Once both operations are completed, we can start searching for our documents.
+
+These steps are done just once, when you index your first documents!
+Querying documents with constraints
+Let’s assume we are searching for some information about large language models, but are only allowed to use Qdrant documentation. LlamaIndex has a concept of retrievers, responsible for finding the most relevant nodes for a given query. Our VectorStoreIndex can be used as a retriever, with some additional constraints - in our case value of the library metadata attribute.
+
+from llama_index.core.vector_stores.types import MetadataFilters, ExactMatchFilter
+
+qdrant_retriever = index.as_retriever(
+    filters=MetadataFilters(
+        filters=[
+            ExactMatchFilter(
+                key="library",
+                value="qdrant",
+            )
+        ]
+    )
+)
+
+nodes_with_scores = qdrant_retriever.retrieve("large language models")
+for node in nodes_with_scores:
+    print(node.text, node.score)
+# Output: Qdrant is a vector database & vector similarity search engine. 0.60551536
+
+The description of Qdrant was the best match, even though it didn’t mention large language models at all. However, it was the only document that belonged to the qdrant library, so there was no other choice. Let’s try to search for something that is not present in the collection.
+
+Let’s define another retrieve, this time for the llama-index library:
+
+llama_index_retriever = index.as_retriever(
+    filters=MetadataFilters(
+        filters=[
+            ExactMatchFilter(
+                key="library",
+                value="llama-index",
+            )
+        ]
+    )
+)
+
+nodes_with_scores = llama_index_retriever.retrieve("large language models")
+for node in nodes_with_scores:
+    print(node.text, node.score)
+# Output: LlamaIndex is a simple, flexible data framework for connecting custom data sources to large language models. 0.63576734
+
+The results returned by both retrievers are different, due to the different constraints, so we implemented a real multitenant search application!
+
+
+
+
+
+
+Multi-Tenancy RAG with LlamaIndex
+In this notebook you will look into building Multi-Tenancy RAG System using LlamaIndex.
+
+Setup
+Download Data
+Load Data
+Create Index
+Create Ingestion Pipeline
+Update Metadata and Insert documents
+Define Query Engines for each user
+Querying
+Setup
+You should ensure you have llama-index and pypdf is installed.
+
+!pip install llama-index pypdf
+Set OpenAI Key
+import os
+
+os.environ["OPENAI_API_KEY"] = "YOUR OPENAI API KEY"
+from llama_index.core import VectorStoreIndex
+from llama_index.core.vector_stores import MetadataFilters, ExactMatchFilter
+from llama_index.core import SimpleDirectoryReader
+from llama_index.core.ingestion import IngestionPipeline
+from llama_index.core.node_parser import SentenceSplitter
+
+from IPython.display import HTML
+Download Data
+We will use An LLM Compiler for Parallel Function Calling and Dense X Retrieval: What Retrieval Granularity Should We Use? papers for the demonstartions.
+
+!wget --user-agent "Mozilla" "https://arxiv.org/pdf/2312.04511.pdf" -O "llm_compiler.pdf"
+!wget --user-agent "Mozilla" "https://arxiv.org/pdf/2312.06648.pdf" -O "dense_x_retrieval.pdf"
+--2024-01-15 14:29:26--  https://arxiv.org/pdf/2312.04511.pdf
+Resolving arxiv.org (arxiv.org)... 151.101.131.42, 151.101.67.42, 151.101.3.42, ...
+Connecting to arxiv.org (arxiv.org)|151.101.131.42|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 755837 (738K) [application/pdf]
+Saving to: ‘llm_compiler.pdf’
+
+
+llm_compiler.pdf      0%[                    ]       0  --.-KB/s               
+llm_compiler.pdf    100%[===================>] 738.12K  --.-KB/s    in 0.004s  
+
+2024-01-15 14:29:26 (163 MB/s) - ‘llm_compiler.pdf’ saved [755837/755837]
+
+--2024-01-15 14:29:26--  https://arxiv.org/pdf/2312.06648.pdf
+Resolving arxiv.org (arxiv.org)... 151.101.131.42, 151.101.67.42, 151.101.3.42, ...
+Connecting to arxiv.org (arxiv.org)|151.101.131.42|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 1103758 (1.1M) [application/pdf]
+Saving to: ‘dense_x_retrieval.pdf’
+
+dense_x_retrieval.p 100%[===================>]   1.05M  --.-KB/s    in 0.005s  
+
+2024-01-15 14:29:26 (208 MB/s) - ‘dense_x_retrieval.pdf’ saved [1103758/1103758]
+
+Load Data
+reader = SimpleDirectoryReader(input_files=["dense_x_retrieval.pdf"])
+documents_jerry = reader.load_data()
+
+reader = SimpleDirectoryReader(input_files=["llm_compiler.pdf"])
+documents_ravi = reader.load_data()
+Create an Empty Index
+index = VectorStoreIndex.from_documents(documents=[])
+Create Ingestion Pipeline
+pipeline = IngestionPipeline(
+    transformations=[
+        SentenceSplitter(chunk_size=512, chunk_overlap=20),
+    ]
+)
+Update Metadata and Insert Documents
+for document in documents_jerry:
+    document.metadata["user"] = "Jerry"
+
+nodes = pipeline.run(documents=documents_jerry)
+# Insert nodes into the index
+index.insert_nodes(nodes)
+for document in documents_ravi:
+    document.metadata["user"] = "Ravi"
+
+nodes = pipeline.run(documents=documents_ravi)
+# Insert nodes into the index
+index.insert_nodes(nodes)
+Define Query Engines
+Define query engines for both the users with necessary filters.
+
+# For Jerry
+jerry_query_engine = index.as_query_engine(
+    filters=MetadataFilters(
+        filters=[
+            ExactMatchFilter(
+                key="user",
+                value="Jerry",
+            )
+        ]
+    ),
+    similarity_top_k=3,
+)
+
+# For Ravi
+ravi_query_engine = index.as_query_engine(
+    filters=MetadataFilters(
+        filters=[
+            ExactMatchFilter(
+                key="user",
+                value="Ravi",
+            )
+        ]
+    ),
+    similarity_top_k=3,
+)
+Querying
+# Jerry has Dense X Rerieval paper and should be able to answer following question.
+response = jerry_query_engine.query(
+    "what are propositions mentioned in the paper?"
+)
+# Print response
+display(HTML(f'<p style="font-size:20px">{response.response}</p>'))
+The paper mentions propositions as an alternative retrieval unit choice. Propositions are defined as atomic expressions of meanings in text that correspond to distinct pieces of meaning in the text. They are minimal and cannot be further split into separate propositions. Each proposition is contextualized and self-contained, including all the necessary context from the text to interpret its meaning. The paper demonstrates the concept of propositions using an example about the Leaning Tower of Pisa, where the passage is split into three propositions, each corresponding to a distinct factoid about the tower.
+
+# Ravi has LLMCompiler paper
+response = ravi_query_engine.query("what are steps involved in LLMCompiler?")
+
+# Print response
+display(HTML(f'<p style="font-size:20px">{response.response}</p>'))
+LLMCompiler consists of three key components: an LLM Planner, a Task Fetching Unit, and an Executor. The LLM Planner identifies the execution flow by defining different function calls and their dependencies based on user inputs. The Task Fetching Unit dispatches the function calls that can be executed in parallel after substituting variables with the actual outputs of preceding tasks. Finally, the Executor executes the dispatched function calling tasks using the associated tools. These components work together to optimize the parallel function calling performance of LLMs.
+
+# This should not be answered as Jerry does not have information about LLMCompiler
+response = jerry_query_engine.query("what are steps involved in LLMCompiler?")
+
+# Print response
+display(HTML(f'<p style="font-size:20px">{response.response}</p>'))
+The steps involved in LLMCompiler are not mentioned in the given context information.

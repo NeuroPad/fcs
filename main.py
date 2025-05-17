@@ -12,8 +12,9 @@ from pathlib import Path
 
 from services.image_rag_service import ImageRAGService
 from services.graphiti_memory_service import GraphitiMemoryService, async_worker
+from services.document_service import DocumentService
 from api import router as api_router
-from api import relik_graph_rag
+
 
 # Initialize the services
 image_rag_service = ImageRAGService(
@@ -37,6 +38,7 @@ app.add_middleware(
 )
 
 app.mount("/processed_files", StaticFiles(directory=str(settings.PROCESSED_FILES_DIR)), name="processed_files")
+app.mount("/uploads", StaticFiles(directory=str(settings.UPLOAD_DIR)), name="uploads")
 
 @app.on_event("startup")
 async def startup_event():
@@ -46,19 +48,28 @@ async def startup_event():
     # Initialize GraphitiMemoryService worker
     await GraphitiMemoryService.initialize_worker()
     
+    # Initialize DocumentService worker
+    await DocumentService.initialize_worker()
+    
     # Initialize a GraphitiMemoryService instance to build indices and constraints
     memory_service = GraphitiMemoryService()
     await memory_service.initialize()
     logger.info("Initialized GraphitiMemoryService on startup")
+    logger.info("Initialized DocumentService worker on startup")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     # Shutdown GraphitiMemoryService worker
     await GraphitiMemoryService.shutdown_worker()
-    logger.info("Shutdown GraphitiMemoryService worker")
+    
+    # Shutdown DocumentService worker
+    await DocumentService.shutdown_worker()
+    
+    logger.info("Shutdown GraphitiMemoryService and DocumentService workers")
 
 # Include the API router
-app.include_router(api_router)
+app.include_router(api_router, prefix="/api")
+
 
 
 @app.get("/")

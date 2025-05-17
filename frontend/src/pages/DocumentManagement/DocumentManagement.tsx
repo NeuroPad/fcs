@@ -21,7 +21,18 @@ import { trash, eye, cloudUpload, close, book, images } from 'ionicons/icons';
 import axios from 'axios';
 import Header from '../../components/Header/Header';
 import Container from '../../components/Container/Container';
+import { useAppDispatch, useAppSelector } from '../../app/hooks';
+import {
+  fetchDocuments,
+  uploadDocument,
+  processDocument,
+  indexDocument,
+  deleteDocument,
+  processPendingDocuments
+} from '../../features/documentSlice';
 import { API_BASE_URL } from '../../api/config';
+import { get } from "../../services/storage";
+import { Document, DocumentState } from '../../types/document';
 
 // Import React FilePond
 import { FilePond, registerPlugin } from 'react-filepond';
@@ -33,6 +44,7 @@ import 'filepond/dist/filepond.min.css';
 import FilePondPluginImageExifOrientation from "filepond-plugin-image-exif-orientation";
 import FilePondPluginImagePreview from "filepond-plugin-image-preview";
 import "filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css";
+import { api } from '../../config/axiosConfig';
 
 // Register the plugins
 registerPlugin(FilePondPluginImageExifOrientation, FilePondPluginImagePreview);
@@ -40,117 +52,109 @@ registerPlugin(FilePondPluginImageExifOrientation, FilePondPluginImagePreview);
 // Create a wrapper component to fix TypeScript issues
 const FilePondComponent = FilePond as any;
 
-interface Document {
-  filename: string;
-  uploadDate: string;
-  size: number;
-  isProcessed: boolean;
-  imagesIndexed: boolean;
-  knowledgeBaseIndexed: boolean;
-  status: string;
-  path: string;
-  type: string;
-}
+
+// Define utility functions inline since fileUtils module is missing
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+const getStatusClass = (status: string): string => {
+  switch (status.toLowerCase()) {
+    case 'processed':
+      return 'status-processed';
+    case 'pending':
+      return 'status-pending';
+    case 'failed':
+      return 'status-failed';
+    default:
+      return 'status-default';
+  }
+};
+
 
 const DocumentManagement: React.FC = () => {
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const dispatch = useAppDispatch();
+  const { documents, isLoading, error } = useAppSelector((state) => state.documents);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isIndexing, setIsIndexing] = useState(false);
+  const [isProcessingPending, setIsProcessingPending] = useState(false);
   const [isMultimodalIndexing, setIsMultimodalIndexing] = useState(false);
   const [files, setFiles] = useState<any[]>([]);
   const pondRef = useRef<any>(null);
 
-  const fetchDocuments = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/files/files`);
-      if (response.data.status === 'success') {
-        setDocuments(response.data.files);
-      }
-    } catch (error) {
-      showError('Error fetching documents');
-    }
-  };
-
   useEffect(() => {
-    fetchDocuments();
-  }, []);
+    // This now correctly calls the Redux thunk
+    dispatch(fetchDocuments());
+  }, [dispatch]);
 
-  const handleProcessDocuments = async () => {
+  const handleProcessDocuments = async (id: number) => {
     try {
       setIsProcessing(true);
-      showSuccess('Document processing started');
-      await axios.post(`${API_BASE_URL}/files/process-pdfs-to-markdown`);
-      showSuccess('Documents processed successfully');
-      fetchDocuments();
+      setToastMessage('Document processing started');
+      setShowToast(true);
+      await dispatch(processDocument(id)).unwrap();
+      setToastMessage('Documents processed successfully');
+      setShowToast(true);
+      // This now correctly calls the Redux thunk
+      await dispatch(fetchDocuments()).unwrap();
     } catch (error) {
-      showError('Error processing documents');
+      setToastMessage('Error processing documents');
+      setShowToast(true);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleIndexImages = async () => {
+  const handleProcessPendingDocuments = async () => {
     try {
-      setIsIndexing(true);
-      showSuccess('Image indexing started');
-      await axios.post(`${API_BASE_URL}/graph-rag/index-markdown-images`);
-      showSuccess('Images indexed successfully');
-      fetchDocuments();
+      setIsProcessingPending(true);
+      setToastMessage('Processing pending documents started');
+      setShowToast(true);
+      await dispatch(processPendingDocuments()).unwrap();
+      setToastMessage('Pending documents processed successfully');
+      setShowToast(true);
+      // This now correctly calls the Redux thunk
+      await dispatch(fetchDocuments()).unwrap();
     } catch (error) {
-      showError('Error indexing images');
+      setToastMessage('Error processing pending documents');
+      setShowToast(true);
     } finally {
-      setIsIndexing(false);
+      setIsProcessingPending(false);
     }
   };
 
-  const handleMultimodalIndex = async () => {
+  const handleDelete = async (id: number) => {
     try {
-      setIsMultimodalIndexing(true);
-      showSuccess('Multimodal indexing started');
-      await axios.post(`${API_BASE_URL}/multimodal-rag/index-documents`);
-      showSuccess('Multimodal indexing completed successfully');
-      fetchDocuments();
+      await dispatch(deleteDocument(id)).unwrap();
+      setToastMessage('File deleted successfully');
+      setShowToast(true);
+      // This now correctly calls the Redux thunk
+      await dispatch(fetchDocuments()).unwrap();
     } catch (error) {
-      showError('Error during multimodal indexing');
-    } finally {
-      setIsMultimodalIndexing(false);
+      setToastMessage('Error deleting file');
+      setShowToast(true);
     }
   };
 
-  const showSuccess = (message: string) => {
-    setToastMessage(message);
-    setShowToast(true);
+  // Helper function to format date
+  const formatDate = (dateString: string): string => {
+    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
-  const showError = (message: string) => {
-    setToastMessage(message);
-    setShowToast(true);
+  // Helper function to get indexed status class
+  const getIndexedStatusClass = (isIndexed: boolean): string => {
+    return isIndexed ? 'status-processed' : 'status-pending';
   };
 
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const getStatusClass = (status: string): string => {
-    console.log("status: ", status);
-    switch (status.toLowerCase()) {
-      case 'image indexed':
-        return 'imageindexed';
-      case 'processed':
-        return 'processed';
-      default:
-        return 'pending';
-    }
-  };
-
+  // Update the columns definition
   const columns = [
     {
       name: 'Filename',
@@ -158,13 +162,18 @@ const DocumentManagement: React.FC = () => {
       sortable: true,
     },
     {
+      name: 'Type',
+      selector: (row: Document) => row.type,
+      sortable: true,
+    },
+    {
       name: 'Upload Date',
-      selector: (row: Document) => row.uploadDate,
+      selector: (row: Document) => formatDate(row.created_at),
       sortable: true,
     },
     {
       name: 'Size',
-      selector: (row: Document) => formatFileSize(row.size),
+      selector: (row: Document) => formatFileSize(row.file_size),
       sortable: true,
     },
     {
@@ -175,6 +184,17 @@ const DocumentManagement: React.FC = () => {
           {row.status}
         </div>
       ),
+      sortable: true,
+    },
+    {
+      name: 'Indexed',
+      selector: (row: Document) => row.is_indexed,
+      cell: (row: Document) => (
+        <div className={`status-badge ${getIndexedStatusClass(row.is_indexed)}`}>
+          {row.is_indexed ? 'Yes' : 'No'}
+        </div>
+      ),
+      sortable: true,
     },
     {
       name: 'Actions',
@@ -192,7 +212,7 @@ const DocumentManagement: React.FC = () => {
             fill="clear"
             size="small"
             color="danger"
-            onClick={() => handleDelete(row.filename)}
+            onClick={() => handleDelete(row.id)}
           >
             <IonIcon icon={trash} />
           </IonButton>
@@ -212,15 +232,6 @@ const DocumentManagement: React.FC = () => {
     window.open(`${API_BASE_URL}/files/file/${filename}`, '_blank');
   };
 
-  const handleDelete = async (filename: string) => {
-    try {
-      await axios.delete(`${API_BASE_URL}/files/file/${filename}`);
-      showSuccess('File deleted successfully');
-      fetchDocuments();
-    } catch (error) {
-      showError('Error deleting file');
-    }
-  };
 
   return (
     <IonPage>
@@ -233,17 +244,13 @@ const DocumentManagement: React.FC = () => {
                 <IonIcon icon={cloudUpload} slot="start" />
                 Upload Documents
               </IonButton>
-              <IonButton onClick={handleProcessDocuments} disabled={isProcessing}>
+              <IonButton onClick={() => handleProcessDocuments(documents[0]?.id)}>
                 {isProcessing ? <IonSpinner name="crescent" /> : <IonIcon icon={book} slot="start" />}
                 Process Documents
               </IonButton>
-              <IonButton onClick={handleIndexImages} disabled={isIndexing}>
-                {isIndexing ? <IonSpinner name="crescent" /> : <IonIcon icon={images} slot="start" />}
-                Index Images
-              </IonButton>
-              <IonButton onClick={handleMultimodalIndex} disabled={isMultimodalIndexing}>
-                {isMultimodalIndexing ? <IonSpinner name="crescent" /> : <IonIcon icon={images} slot="start" />}
-                Multimodal Index
+              <IonButton onClick={handleProcessPendingDocuments}>
+                {isProcessingPending ? <IonSpinner name="crescent" /> : <IonIcon icon={book} slot="start" />}
+                Index Pending Documents
               </IonButton>
             </div>
 
@@ -299,67 +306,62 @@ const DocumentManagement: React.FC = () => {
                   styleItemPanelAspectRatio={1}
                   stylePanelAspectRatio={0.5}
                   server={{
-                    process: (
-                      fieldName: string,
-                      file: File,
-                      metadata: any,
-                      load: (responseText: string) => void,
-                      error: (errorText: string) => void,
-                      progress: (isComputable: boolean, loaded: number, total: number) => void,
-                      abort: () => void,
-                      transfer: (transferredFile: any) => void,
-                      options: any
-                    ) => {
-                      // Create FormData
+                    process: (fieldName: any, file: any, metadata: any, load: any, error: any, progress: any, abort: any) => {
                       const formData = new FormData();
+                      // The FastAPI endpoint expects a list of files with parameter name 'files'
+                      // We need to append the file with the correct field name
                       formData.append('files', file, file.name);
                       
-                      // Create request
-                      const request = new XMLHttpRequest();
-                      request.open('POST', `${API_BASE_URL}/files/upload-files`);
-                      
-                      // Handle response
-                      request.onload = function() {
-                        if (request.status >= 200 && request.status < 300) {
-                          // Success
-                          load(request.responseText);
-                          fetchDocuments();
-                          showSuccess('Files uploaded successfully');
-                          setTimeout(() => {
-                            setShowUploadModal(false);
-                            setFiles([]);
-                          }, 1000);
-                        } else {
-                          // Error
-                          console.error('Upload error:', request.responseText);
-                          error('Upload failed');
-                          showError('Error uploading files');
+                      // Set the correct Content-Type header (let the browser set it with the boundary)
+                      // Create a custom axios instance without the default Content-Type header
+                      // This allows the browser to set the correct multipart/form-data boundary
+                      const uploadInstance = axios.create({
+                        baseURL: API_BASE_URL,
+                        timeout: 100000,
+                        headers: {
+                          'Accept': 'application/json',
                         }
-                      };
+                      });
                       
-                      // Handle errors
-                      request.onerror = function() {
-                        console.error('Upload error:', request.responseText);
-                        error('Upload failed');
-                        showError('Error uploading files');
-                      };
-                      
-                      // Handle progress
-                      request.upload.onprogress = function(e) {
-                        progress(e.lengthComputable, e.loaded, e.total);
-                      };
-                      
-                      // Send request
-                      request.send(formData);
-                      
-                      // Return abort function
-                      return {
+                      // Add authorization header if needed
+                      get("token").then(token => {
+                        if (token) {
+                          uploadInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                        }
+                        
+                        // Use this instance for the upload
+                         uploadInstance.post(`/documents/upload`, formData, {
+                           onUploadProgress: (e:any) => {
+                             progress(e.lengthComputable, e.loaded, e.total);
+                           },
+                         })
+                         .then(response => {
+                           load(JSON.stringify(response.data)); // FilePond expects a string response
+                           // Handle successful upload response
+                           console.log('Upload successful:', response.data);
+                           // Dispatch fetchDocuments to update the list after successful upload
+                           dispatch(fetchDocuments());
+                         })
+                         .catch(err => {
+                           error(err.response?.data?.detail || 'Upload failed'); // FilePond expects an error string
+                           // Handle upload error
+                           console.error('Upload failed:', err);
+                           setToastMessage('File upload failed');
+                           setShowToast(true);
+                         });
+                       }).catch(err => {
+                         console.error('Error getting token:', err);
+                         error('Authentication error');
+                       });
+
+                      return { // Return object with abort method
                         abort: () => {
-                          request.abort();
+                          // Cancel the axios request if needed
+                          // This requires implementing cancellation logic in axios
                           abort();
                         }
                       };
-                    }
+                    },
                   }}
                   acceptedFileTypes={[
                     'application/pdf',

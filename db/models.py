@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from db.session import Base
@@ -37,3 +37,22 @@ class User(Base):
     belief_sensitivity = Column(String, nullable=True)  # User's sensitivity to belief challenges (high, moderate, low)
     salience_decay_speed = Column(String, default="default", nullable=True)  # Controls how quickly belief salience decays
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Document(Base):
+    __tablename__ = "documents"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    filename = Column(String, nullable=False)
+    content_type = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)  # Path to the original file
+    markdown_path = Column(String, nullable=True)  # Path to markdown version (for scanned PDFs)
+    file_size = Column(Integer, nullable=False)
+    status = Column(String, default="pending")  # pending, processing, completed, failed
+    is_indexed = Column(Boolean, default=False)  # Whether the document has been indexed in RAG
+    error_message = Column(Text, nullable=True)  # Error message if processing failed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)  # When processing completed
+    indexed_at = Column(DateTime, nullable=True)  # When document was indexed in RAG
+    
+    user = relationship("User")

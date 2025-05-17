@@ -1,9 +1,8 @@
 import axios, { AxiosInstance } from 'axios';
 import { get } from "../services/storage";
-import { store } from '../app/store'; // Import the store
 import { logout } from '../features/authSlice'; // Import the logout action
-
-const BASE_URL = 'api/';
+import { API_BASE_URL } from '../api/config';
+const BASE_URL = API_BASE_URL;
 
 export const getBaseUrl = () => {
   if (typeof window !== 'undefined') {
@@ -22,24 +21,28 @@ export const api: AxiosInstance = axios.create({
   },
 });
 
-api.interceptors.request.use(async (config) => {
-  const token = await get("token");
-  if (token) {
-    config.headers["Authorization"] = `Bearer ${token}`;
-  }
-  return config;
-});
-
-api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      // Dispatch logout action when token is expired
-      store.dispatch(logout());
-      window.location.reload(); // Reload the page to prompt re-login
+export const setupAxiosInterceptors = (store: any) => {
+  api.interceptors.request.use(async (config) => {
+    const token = await get("token");
+    console.log('Fetching token from storage:', token); // Add this line
+    if (token) {
+      config.headers["Authorization"] = `Bearer ${token}`;
+      console.log('Adding Authorization header:', config.headers["Authorization"]); // Add this line
     }
-    return Promise.reject(error);
-  }
-);
+    return config;
+  });
+
+  api.interceptors.response.use(
+    (response) => {
+      return response;
+    },
+    (error) => {
+      if (error.response && error.response.status === 401) {
+        // Dispatch logout action when token is expired
+        store.dispatch(logout());
+        window.location.reload(); // Reload the page to prompt re-login
+      }
+      return Promise.reject(error);
+    }
+  );
+};

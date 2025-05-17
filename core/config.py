@@ -17,11 +17,18 @@ class Settings:
     ALGORITHM = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))
     
-    PROCESSED_FILES_DIR = ROOT_DIR / "processed_files"
+    # Pinecone settings for RAG
+    PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+    PINECONE_ENVIRONMENT = os.getenv("PINECONE_ENVIRONMENT", "gcp-starter")
+    
+    # Directory paths
     UPLOAD_DIR = ROOT_DIR / "uploads"
     CHAT_IMAGES_DIR = ROOT_DIR / "chat_images"
     CHROMA_DB_DIR = ROOT_DIR / "chroma_db"
     MODELS_DIR = MODELS_DIR  
+    
+    # For backward compatibility
+    PROCESSED_FILES_DIR = UPLOAD_DIR
 
 
 settings = Settings()
