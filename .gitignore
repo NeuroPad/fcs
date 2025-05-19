@@ -41,3 +41,7 @@ fcs.db
 
 #model related items
 /models/
+
+#support docs items
+/fcs_docs
+/graphiti_docs
