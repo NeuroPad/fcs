@@ -11,7 +11,7 @@ import json
 from core.config import settings
 import logging
 from services.auth.auth_service import get_user_from_token
-from services.rag_service import RAGService # Added import
+from services.rag_service import RAGService
 
 
 logger = logging.getLogger(__name__)
@@ -188,16 +188,13 @@ async def ask_question(
         
         # Get response based on mode, passing chat history and user object
         if mode == "normal":
-            # Initialize RAGService for normal mode
-            rag_service = RAGService(
-                pinecone_api_key=settings.PINECONE_API_KEY,
-                pinecone_environment=settings.PINECONE_ENVIRONMENT
-            )
+            # Initialize RAG service for the query
+            rag_service = RAGService()
             response = await rag_service.query(
                 query_text=request.text,
-                user_id=user.id, # Pass user_id directly
+                user_id=user.id,
                 chat_history=chat_history,
-                user=user_obj # Pass the user dictionary for memory
+                user=user_obj
             )
         
         

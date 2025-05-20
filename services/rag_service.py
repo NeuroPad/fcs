@@ -1,8 +1,7 @@
-# services/rag_service.py
 import logging
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 from datetime import datetime
 import asyncio
 
@@ -23,6 +22,8 @@ from llama_index.llms.openai import OpenAI
 from llama_index.vector_stores.pinecone import PineconeVectorStore
 from pinecone import Pinecone
 from datetime import datetime
+import chromadb
+from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from core.config import settings
 from db.models import Document as DBDocument
@@ -30,48 +31,18 @@ from db.session import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from services.graphiti_memory_service import GraphitiMemoryService, Message
+from schemas.memory import SearchQuery
 
 logger = logging.getLogger(__name__)
 
 class RAGService:
-    def __init__(self, pinecone_api_key: str = None, pinecone_environment: str = None, index_name: str = "fcs"):
-        # Use provided API key or fall back to environment variable
-        self.pinecone_api_key = pinecone_api_key or settings.PINECONE_API_KEY
-        if not self.pinecone_api_key:
-            raise ValueError("Pinecone API key must be provided either through constructor or PINECONE_API_KEY environment variable")
-            
-        self.pinecone_environment = pinecone_environment or settings.PINECONE_ENVIRONMENT
-        self.index_name = index_name
-        
-        # Initialize Pinecone client
-        try:
-            self.pinecone_client = Pinecone(
-                api_key=self.pinecone_api_key
-            )
-        except Exception as e:
-            logger.error(f"Failed to initialize Pinecone client: {str(e)}")
-            raise
-        
-        # Create index if it doesn't exist
-        active_indexes = self.pinecone_client.list_indexes()
-        index_names = [index_spec.name for index_spec in active_indexes]
-
-        if index_name not in index_names:
-            self.pinecone_client.create_index(
-                name=index_name,
-                dimension=1536,  # OpenAI embedding dimension
-                metric="cosine"
-            )
-        
-        # Get the index
-        self.pinecone_index = self.pinecone_client.Index(index_name)
-        
-        # Initialize vector store
-        self.vector_store = PineconeVectorStore(
-            pinecone_index=self.pinecone_index
-        )
-        
-        # Initialize components
+    def __init__(
+        self, 
+        db_type: Literal["pinecone", "chroma"] = "chroma",
+        index_name: str = "fcs",
+        chroma_db_path: str = "./chroma_db"
+    ):
+        # Initialize embedding model and LLM
         self.embed_model = OpenAIEmbedding(model_name="text-embedding-3-small")
         self.llm = OpenAI(api_key=settings.OPENAI_API_KEY, model="gpt-4-turbo-preview")
         self.node_parser = SimpleNodeParser.from_defaults(chunk_size=512, chunk_overlap=32)
@@ -80,6 +51,62 @@ class RAGService:
         Settings.llm = self.llm
         Settings.node_parser = self.node_parser
         Settings.embed_model = self.embed_model
+        
+        # Store the db_type
+        self.db_type = db_type
+        self.index_name = index_name
+        
+        # Initialize vector store based on db_type
+        if db_type == "pinecone":
+            # Get API key from settings
+            pinecone_api_key = settings.PINECONE_API_KEY
+            pinecone_environment = settings.PINECONE_ENVIRONMENT
+            
+            if not pinecone_api_key:
+                raise ValueError("Pinecone API key must be provided in settings")
+            
+            # Initialize Pinecone client
+            try:
+                self.pinecone_client = Pinecone(
+                    api_key=pinecone_api_key
+                )
+            except Exception as e:
+                logger.error(f"Failed to initialize Pinecone client: {str(e)}")
+                raise
+            
+            # Create index if it doesn't exist
+            active_indexes = self.pinecone_client.list_indexes()
+            index_names = [index_spec.name for index_spec in active_indexes]
+
+            if index_name not in index_names:
+                self.pinecone_client.create_index(
+                    name=index_name,
+                    dimension=1536,  # OpenAI embedding dimension
+                    metric="cosine"
+                )
+            
+            # Get the index
+            self.pinecone_index = self.pinecone_client.Index(index_name)
+            
+            # Initialize vector store
+            self.vector_store = PineconeVectorStore(
+                pinecone_index=self.pinecone_index
+            )
+            
+        elif db_type == "chroma":
+            # Initialize ChromaDB client
+            self.chroma_client = chromadb.PersistentClient(path=chroma_db_path)
+            
+            # Create or get collection
+            self.collection = self.chroma_client.get_or_create_collection(
+                name=index_name,
+                metadata={"hnsw:space": "cosine"}
+            )
+            
+            # Initialize vector store
+            self.vector_store = ChromaVectorStore(chroma_collection=self.collection)
+        else:
+            raise ValueError(f"Unsupported db_type: {db_type}")
         
         # Create storage context
         storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
@@ -174,8 +201,7 @@ class RAGService:
             
             # Retrieve context
             retrieved_nodes = retriever.retrieve(query_text)
-            retrieved_context = "\n".join([node.node.get_content() for node in retrieved_nodes])
-
+            retrieved_context = "\n".join([f"{node.node.get_content()}\nSOURCE: {node.node.metadata.get('filename', 'Unknown')}\nDOCUMENT_ID: {node.node.metadata.get('document_id', 'Unknown')}\nSCORE: {node.score if hasattr(node, 'score') else 'Unknown'}" for node in retrieved_nodes])
             # Format chat history as context if available
             chat_context = ""
             if chat_history and len(chat_history) > 0:
@@ -188,12 +214,28 @@ class RAGService:
                         chat_context += f"User: {content}\n"
                     elif role == "assistant":
                         chat_context += f"Assistant: {content}\n"
+                        
+            # Retrieve user memory facts
+            memory_facts_context = ""
+            try:
+                memory_service = GraphitiMemoryService()
+                search_query = SearchQuery(query=query_text, max_facts=3)  # Adjust max_facts as needed
+                memory_search_results = await memory_service.search_memory(str(user_id), search_query)
+                
+                if memory_search_results.get("status") == "success" and memory_search_results.get("results"):
+                    memory_facts_context = "\n\nUser memory facts:\n"
+                    for fact in memory_search_results.get("results"):
+                        memory_facts_context += f"- {fact.get('fact')}\n"
+                    logger.info(f"Retrieved {len(memory_search_results.get('results'))} memory facts for user_id: {user_id}")
+            except Exception as e:
+                logger.warning(f"Error retrieving memory facts for user_id {user_id}: {str(e)}")
 
-            # Define the prompt template with chat history
+            # Define the prompt template with chat history and memory facts
             qa_tmpl_str = (
                 "You are an adaptive AI designed to reason fluidly, weigh confidence continuously, and engage in context-aware interaction.\n"
                 "You serve as the expressive voice of a cognitive system grounded in structured beliefs and mutual learning—not as the source of knowledge or reasoning.\n"
                 "All core knowledge comes from the system's belief graph. You do not invent beliefs, revise memory, or make decisions.\n\n"
+                "DONOT use any other source of knowledge aprart from the ones provided in the context.\n\n"
                 "When users greet with casual expressions like 'hello', 'hi', or 'hey', respond warmly with:\n"
                 "  > Hello! I'm your cognitive companion, ready to grow and learn with you. Feel free to ask questions, share thoughts, or explore our journey together.\n\n"
                 "For general assistance queries like 'can you help me' or 'I need help', respond with:\n"
@@ -234,9 +276,18 @@ class RAGService:
                 "PREVIOUS CHATS:\n"
                 "{chat_context}\n"
                 "---------------------\n"
+                "USER MEMORY FACTS:\n"
+                "{memory_facts_context}\n"
+                "---------------------\n"
                 "Respond to the following query using only the information and beliefs available in the system.\n"
                 "If you add clarification or expression, format it with blockquote `>` syntax:\n"
                 "Query: {query_str}\n"
+                "also you must list the source or sources used in this exact format, you can see the source in the file_path in the context\n\n"
+                "Example:\n"
+                "SOURCES: [document_name.pdf,second_document_name.md]\n\n"
+                "\nIf you primarily used memory facts, include the following at the end of your response:\n"
+                "MEMORY: [include the specific memory facts used]\n"
+                "\nIf you didn't use any specific sources or memory facts, don't include any SOURCES or MEMORY section.\n\n"
                 "Answer:"
             )
             qa_tmpl = PromptTemplate(qa_tmpl_str)
@@ -246,8 +297,50 @@ class RAGService:
                 prompt=qa_tmpl,
                 query_str=query_text,
                 multimodal_context=retrieved_context,
-                chat_context=chat_context
+                chat_context=chat_context,
+                memory_facts_context=memory_facts_context
             )
+            
+            # Helper functions to extract and process the response
+            def extract_sources(text: str) -> List[str]:
+                """Extract source filenames from the response"""
+                if "SOURCES:" in text:
+                    # Find the SOURCES section
+                    sources_section = text.split("SOURCES:")[1].strip()
+                    
+                    # Extract filenames
+                    sources = [s.strip() for s in sources_section.split(",")]
+                    return [s for s in sources if s]  # Remove empty strings
+                return None
+            
+            def extract_memory(text: str) -> str:
+                """Extract unique memory facts from the response"""
+                if "MEMORY:" in text:
+                    # Find the MEMORY section
+                    memory_section = text.split("MEMORY:")[1].strip()
+                    # If there's another section after MEMORY, only take until that section
+                    if "SOURCES:" in memory_section:
+                        memory_section = memory_section.split("SOURCES:")[0].strip()
+                    
+                    # Split by newlines and deduplicate
+                    memory_items = set(memory_section.split('\n'))
+                    # Remove empty items and join back
+                    return '\n'.join(item for item in memory_items if item.strip())
+                return None
+            
+            def clean_response(text: str) -> str:
+                """Remove SOURCES and MEMORY sections from the response"""
+                clean_text = text
+                if "SOURCES:" in clean_text:
+                    clean_text = clean_text.split("SOURCES:")[0].strip()
+                if "MEMORY:" in clean_text:
+                    clean_text = clean_text.split("MEMORY:")[0].strip()
+                return clean_text
+            
+            # Extract unique sources and memory from the response
+            extracted_sources = list(set(extract_sources(response_text) or []))
+            extracted_memory = extract_memory(response_text)
+            clean_response_text = clean_response(response_text)
             
             # Prepare response object
             class MockResponse:
@@ -255,19 +348,11 @@ class RAGService:
                     self.response = response_str
                     self.source_nodes = source_nodes_list
             
-            response = MockResponse(response_text, retrieved_nodes)
+            response = MockResponse(clean_response_text, retrieved_nodes)
             
-            # Extract source documents
-            source_nodes = response.source_nodes
-            sources_for_response = []
-            for node in source_nodes:
-                if "filename" in node.metadata:
-                    sources_for_response.append({
-                        "filename": node.metadata["filename"],
-                        "document_id": node.metadata.get("document_id"),
-                        "score": node.score if hasattr(node, "score") else None
-                    })
-
+            # Extract unique sources from the LLM response only
+            extracted_sources = list(set(extract_sources(response_text) or []))
+            
             # Store the interaction in memory if user is provided
             if user and user.get('id'):
                 try:
@@ -285,11 +370,11 @@ class RAGService:
                     
                     # Add AI response to memory with sources
                     memory_sources_description = "ai assistant"
-                    if sources_for_response:
-                        source_filenames = [s['filename'] for s in sources_for_response if 'filename' in s]
-                        if source_filenames:
-                            source_list_str = ", ".join(list(set(source_filenames)))
-                            memory_sources_description = f"ai assistant with sources: {source_list_str}"
+                    if extracted_sources:
+                        source_list_str = ", ".join(extracted_sources)
+                        memory_sources_description = f"ai assistant with sources: {source_list_str}"
+                    elif extracted_memory:
+                        memory_sources_description = "ai assistant with memory facts"
                     
                     ai_message = Message(
                         content=response.response,
@@ -304,10 +389,12 @@ class RAGService:
             else:
                 logger.warning("No user_id provided in user object, or user object not provided, skipping memory storage for RAG query")
             
+            # Return the response with only sources extracted from LLM response
             return ExtendedGraphRAGResponse(
                 answer=response.response,
                 images=None,
-                sources=[s['filename'] for s in sources_for_response if 'filename' in s] # Extract filenames for sources
+                sources=extracted_sources if extracted_sources else None,
+                memory_facts=extracted_memory
             )
         
         except Exception as e:
@@ -318,6 +405,7 @@ class RAGService:
                 images=None,
                 sources=None
             )
+    
     
     async def process_pending_documents(self, db: Session) -> Dict[str, Any]:
         """Process all pending documents in the database"""
@@ -373,13 +461,39 @@ class RAGService:
                     "message": f"Document {document_id} not found"
                 }
             
-            # Delete from Pinecone
-            self.pinecone_index.delete(
-                filter={
-                    "document_id": str(document_id),
-                    "user_id": str(user_id)
-                }
-            )
+            # Delete from vector store
+            if self.db_type == "pinecone":
+                self.pinecone_index.delete(
+                    filter={
+                        "document_id": str(document_id),
+                        "user_id": str(user_id)
+                    }
+                )
+            elif self.db_type == "chroma":
+                try:
+                    # Get all document IDs in the collection
+                    all_ids = self.collection.get()["ids"]
+                    
+                    # Get all metadatas to find documents matching our criteria
+                    all_metadatas = self.collection.get()["metadatas"]
+                    
+                    # Find IDs that match our document_id and user_id
+                    ids_to_delete = []
+                    for i, metadata in enumerate(all_metadatas):
+                        if (metadata and 
+                            metadata.get("document_id") == str(document_id) and 
+                            metadata.get("user_id") == str(user_id)):
+                            ids_to_delete.append(all_ids[i])
+                    
+                    # Delete matching documents
+                    if ids_to_delete:
+                        self.collection.delete(ids=ids_to_delete)
+                        logger.info(f"Deleted {len(ids_to_delete)} chunks from ChromaDB for document {document_id}")
+                    else:
+                        logger.warning(f"No matching chunks found in ChromaDB for document {document_id}")
+                except Exception as e:
+                    logger.error(f"Error during ChromaDB deletion: {str(e)}")
+                    # Continue with updating the database flag even if deletion failed
             
             # Update document in database
             document.is_indexed = False

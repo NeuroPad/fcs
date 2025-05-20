@@ -13,3 +13,4 @@ class ExtendedGraphRAGResponse(BaseModel):
     answer: str
     images: Optional[List[str]] = None
     sources: Optional[List[str]] = None
+    memory_facts: Optional[str] = None

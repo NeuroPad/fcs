@@ -14,12 +14,8 @@ from api.auth.jwt_handler import get_current_active_user
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Initialize RAG service
-# Note: In production, these values should come from environment variables
-rag_service = RAGService(
-    pinecone_api_key=settings.PINECONE_API_KEY,
-    pinecone_environment=settings.PINECONE_ENVIRONMENT
-)
+# Initialize RAG service with ChromaDB as the default
+rag_service = RAGService()
 
 @router.post("/index-document/{document_id}")
 async def index_document(
