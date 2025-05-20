@@ -13,7 +13,8 @@ from schemas.memory import (
     SearchQuery,
     SearchResults,
     OperationResponse,
-    FactResult
+    FactResult,
+    TopConnectionsResponse
 )
 
 router = APIRouter(prefix="/memory", tags=["memory"])
@@ -234,3 +235,32 @@ async def clear_neo4j_data(service: GraphitiMemoryService = Depends(get_memory_s
         status=result["status"],
         message=result["message"]
     )
+
+
+@router.get("/top-connections/{user_id}", response_model=TopConnectionsResponse)
+async def get_top_connections(
+    user_id: str, 
+    limit: int = 10, 
+    service: GraphitiMemoryService = Depends(get_memory_service)
+):
+    """Get the most connected nodes and facts for a specific user
+    
+    This endpoint finds the nodes with the most connections and the facts 
+    that appear most frequently in the user's knowledge graph.
+    
+    Args:
+        user_id: The user ID to query
+        limit: Maximum number of nodes and facts to return (default: 10)
+        
+    Returns:
+        TopConnectionsResponse with top nodes and facts
+    """
+    result = await service.get_top_connections(user_id, limit)
+    
+    if result["status"] == "error":
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=result["message"]
+        )
+    
+    return result

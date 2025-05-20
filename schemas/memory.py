@@ -92,3 +92,25 @@ class OperationResponse(BaseModel):
     status: str = Field(..., description="Status of the operation (success, error, partial)")
     message: str = Field(..., description="Message describing the operation result")
     data: Optional[Dict[str, Any]] = Field(None, description="Additional data about the operation")
+
+
+class TopNode(BaseModel):
+    """Response model for a top node result"""
+    uuid: str = Field(..., description="The UUID of the node")
+    name: str = Field(..., description="The name of the node")
+    summary: Optional[str] = Field(None, description="The summary of the node")
+    connections: int = Field(..., description="Number of connections to this node")
+
+
+class TopFact(BaseModel):
+    """Response model for a top fact result"""
+    fact: str = Field(..., description="The fact content")
+    occurrences: int = Field(..., description="Number of occurrences of this fact")
+
+
+class TopConnectionsResponse(BaseModel):
+    """Response model for top connections"""
+    status: str = Field(..., description="Status of the operation")
+    top_nodes: List[TopNode] = Field(..., description="List of top nodes by connection count")
+    top_facts: List[TopFact] = Field(..., description="List of top facts by occurrence count")
+    message: Optional[str] = Field(None, description="Error message if status is error")

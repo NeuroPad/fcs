@@ -690,3 +690,72 @@ class GraphitiMemoryService:
         """Close the connection to the graph database"""
         await self.graphiti.close()
         logger.info("Closed GraphitiMemoryService connection")
+
+    async def get_top_connections(self, user_id: str, limit: int = 10) -> Dict[str, Any]:
+        """Get the most connected nodes and facts for a specific user
+        
+        Args:
+            user_id: The user ID (will be used as group_id internally)
+            limit: Maximum number of top nodes to return
+            
+        Returns:
+            Dict with top nodes and facts
+        """
+        try:
+            with self.neo4j_driver.session() as session:
+                # Find the most connected nodes
+                node_result = session.run(
+                    """
+                    MATCH (n:Entity)-[r]-(other)
+                    WHERE n.group_id = $group_id
+                    WITH n, count(r) as connections
+                    ORDER BY connections DESC
+                    LIMIT $limit
+                    RETURN n.uuid as uuid, n.name as name, n.summary as summary, connections
+                    """,
+                    group_id=user_id,
+                    limit=limit
+                )
+                
+                top_nodes = []
+                for record in node_result:
+                    top_nodes.append({
+                        "uuid": record["uuid"],
+                        "name": record["name"],
+                        "summary": record["summary"],
+                        "connections": record["connections"]
+                    })
+                
+                # Find the most relevant facts (edges with the highest count of occurrences)
+                edge_result = session.run(
+                    """
+                    MATCH (src:Entity)-[r:RELATES_TO]->(tgt:Entity)
+                    WHERE r.group_id = $group_id
+                    WITH r.fact as fact, count(r) as occurrences
+                    ORDER BY occurrences DESC
+                    LIMIT $limit
+                    RETURN fact, occurrences
+                    """,
+                    group_id=user_id,
+                    limit=limit
+                )
+                
+                top_facts = []
+                for record in edge_result:
+                    top_facts.append({
+                        "fact": record["fact"],
+                        "occurrences": record["occurrences"]
+                    })
+                
+            return {
+                "status": "success",
+                "top_nodes": top_nodes,
+                "top_facts": top_facts
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting top connections: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Failed to get top connections: {str(e)}"
+            }
