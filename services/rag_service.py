@@ -1,11 +1,13 @@
 import logging
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Literal
+from typing import List, Dict, Any, Optional, Literal, Union
 from datetime import datetime
 import asyncio
+import json
 
 from schemas.graph_rag import ExtendedGraphRAGResponse
+from pydantic import BaseModel, Field
 
 from llama_index.core import (
     PromptTemplate,
@@ -34,6 +36,14 @@ from services.graphiti_memory_service import GraphitiMemoryService, Message
 from schemas.memory import SearchQuery
 
 logger = logging.getLogger(__name__)
+
+class RAGResponse(BaseModel):
+    """Structured response from the RAG system."""
+    
+    answer: str = Field(description="The answer text to the user's query")
+    sources: Optional[List[str]] = Field(None, description="List of source documents used")
+    memory_facts: Optional[str] = Field(None, description="Memory facts used in the response")
+    should_save: bool = Field(description="Whether this query and response should be saved to memory")
 
 class RAGService:
     def __init__(
@@ -269,6 +279,12 @@ class RAGService:
                 "- Do not generate or imply source citations, belief updates, or persistent memory unless explicitly present in the context\n"
                 "- You may rephrase contradictions, summaries, or confidence scores into conversational English\n"
                 "- Favor clarity over verbosity—this system learns with the user, not ahead of them\n\n"
+                "IMPORTANT: DO NOT SAVE THE FOLLOWING TYPES OF QUERIES TO MEMORY:\n"
+                "1. Mathematical questions (e.g., '5+5', '2x+3=21')\n"
+                "2. Greetings (e.g., 'hello', 'hey there', 'hi')\n"
+                "3. System enquiries (e.g., 'what are you', 'how do you work', 'what is your name')\n"
+                "4. Memory-related questions (e.g., 'what do you know about me', 'what's in my memory', 'what was my last question')\n"
+                "For these types of queries, set 'should_save' to false in your response.\n\n"
                 "---------------------\n"
                 "RETRIEVED CONTEXT:\n"
                 "{multimodal_context}\n"
@@ -288,73 +304,259 @@ class RAGService:
                 "\nIf you primarily used memory facts, include the following at the end of your response:\n"
                 "MEMORY: [include the specific memory facts used]\n"
                 "\nIf you didn't use any specific sources or memory facts, don't include any SOURCES or MEMORY section.\n\n"
+                "Your response MUST be in valid JSON format matching this structure:\n"
+                "{\n"
+                "  \"answer\": \"Your answer text here\",\n"
+                "  \"sources\": [\"source1.pdf\", \"source2.md\"],  // or null if no sources\n"
+                "  \"memory_facts\": \"memory facts used\",  // or null if no memory facts\n"
+                "  \"should_save\": true  // or false for math questions, greetings, system enquiries, or memory-related questions\n"
+                "}\n"
                 "Answer:"
             )
             qa_tmpl = PromptTemplate(qa_tmpl_str)
             
-            # Query the LLM with the formatted prompt
-            response_text = self.llm.predict(
-                prompt=qa_tmpl,
-                query_str=query_text,
-                multimodal_context=retrieved_context,
-                chat_context=chat_context,
-                memory_facts_context=memory_facts_context
-            )
-            
-            # Helper functions to extract and process the response
-            def extract_sources(text: str) -> List[str]:
-                """Extract source filenames from the response"""
-                if "SOURCES:" in text:
-                    # Find the SOURCES section
-                    sources_section = text.split("SOURCES:")[1].strip()
+            # First try using regular completion and parsing the JSON
+            try:
+                response_text = self.llm.predict(
+                    prompt=qa_tmpl,
+                    query_str=query_text,
+                    multimodal_context=retrieved_context,
+                    chat_context=chat_context,
+                    memory_facts_context=memory_facts_context
+                )
+                
+                # Helper functions to extract JSON
+                def extract_json(text):
+                    """Extract JSON from text if present"""
+                    try:
+                        # First, try to find JSON-like content with curly braces
+                        if '{' in text and '}' in text:
+                            start_idx = text.find('{')
+                            end_idx = text.rfind('}') + 1
+                            json_str = text[start_idx:end_idx]
+                            return json.loads(json_str)
+                        return None
+                    except json.JSONDecodeError:
+                        return None
+                
+                # Helper functions to extract sources and memory
+                def extract_sources(text: str) -> List[str]:
+                    """Extract source filenames from the response"""
+                    if "SOURCES:" in text:
+                        # Find the SOURCES section
+                        sources_section = text.split("SOURCES:")[1].strip()
+                        
+                        # Extract filenames
+                        sources = [s.strip() for s in sources_section.split(",")]
+                        return [s for s in sources if s]  # Remove empty strings
+                    return None
+                
+                def extract_memory(text: str) -> str:
+                    """Extract unique memory facts from the response"""
+                    if "MEMORY:" in text:
+                        # Find the MEMORY section
+                        memory_section = text.split("MEMORY:")[1].strip()
+                        # If there's another section after MEMORY, only take until that section
+                        if "SOURCES:" in memory_section:
+                            memory_section = memory_section.split("SOURCES:")[0].strip()
+                        
+                        # Split by newlines and deduplicate
+                        memory_items = set(memory_section.split('\n'))
+                        # Remove empty items and join back
+                        return '\n'.join(item for item in memory_items if item.strip())
+                    return None
+                
+                def clean_response(text: str) -> str:
+                    """Remove SOURCES and MEMORY sections from the response"""
+                    clean_text = text
+                    if "SOURCES:" in clean_text:
+                        clean_text = clean_text.split("SOURCES:")[0].strip()
+                    if "MEMORY:" in clean_text:
+                        clean_text = clean_text.split("MEMORY:")[0].strip()
+                    return clean_text
+                
+                # Try to parse the JSON from the response
+                json_data = extract_json(response_text)
+                
+                # First, add the memory phrases detection function
+                def is_memory_related_query(query_text: str) -> bool:
+                    """Check if a query is related to memory or asking about what the system knows about the user"""
+                    memory_phrases = [
+                        "what do you know about me", 
+                        "what's in my memory", 
+                        "what is in my memory",
+                        "what was my last question", 
+                        "what did i ask", 
+                        "what have i told you",
+                        "what do you remember about me",
+                        "tell me what you know about me",
+                        "what information do you have on me",
+                        "show me my memory",
+                        "recall what i said",
+                        "what was my previous",
+                        "how much do you know about me",
+                        "what are my previous",
+                        "what's saved in memory",
+                        "what is saved in memory",
+                        "am i in your memory",
+                        "do you remember",
+                        "can you remember",
+                        "what was our last conversation",
+                        "what did we talk about",
+                        "what have we discussed",
+                        "what did i say about",
+                        "what have i shared with you"
+                    ]
                     
-                    # Extract filenames
-                    sources = [s.strip() for s in sources_section.split(",")]
-                    return [s for s in sources if s]  # Remove empty strings
-                return None
-            
-            def extract_memory(text: str) -> str:
-                """Extract unique memory facts from the response"""
-                if "MEMORY:" in text:
-                    # Find the MEMORY section
-                    memory_section = text.split("MEMORY:")[1].strip()
-                    # If there's another section after MEMORY, only take until that section
-                    if "SOURCES:" in memory_section:
-                        memory_section = memory_section.split("SOURCES:")[0].strip()
+                    query_lower = query_text.lower()
                     
-                    # Split by newlines and deduplicate
-                    memory_items = set(memory_section.split('\n'))
-                    # Remove empty items and join back
-                    return '\n'.join(item for item in memory_items if item.strip())
-                return None
+                    # Check for direct phrase matches
+                    for phrase in memory_phrases:
+                        if phrase in query_lower:
+                            return True
+                    
+                    # Check for possessive queries about user information
+                    possessive_indicators = [
+                        "my",
+                        "our",
+                        "we",
+                        "i"
+                    ]
+                    
+                    memory_related_words = [
+                        "memory",
+                        "remember",
+                        "recall",
+                        "stored",
+                        "saved",
+                        "previous",
+                        "history",
+                        "conversation",
+                        "chat",
+                        "information",
+                        "data",
+                        "record",
+                        "log",
+                        "past",
+                        "earlier"
+                    ]
+                    
+                    # If the query contains both a possessive indicator and memory-related word, it's likely memory-related
+                    has_possessive = any(word in query_lower.split() for word in possessive_indicators)
+                    has_memory_word = any(word in query_lower.split() for word in memory_related_words)
+                    
+                    if has_possessive and has_memory_word:
+                        return True
+                    
+                    return False
+                
+                # Define a function to detect if the query is ONLY a greeting
+                def is_only_greeting(query_text: str) -> bool:
+                    """Check if the query is only a greeting without a substantive question"""
+                    greeting_patterns = ["hi", "hello", "hey", "hey there", "hi there", "hello there"]
+                    query_lower = query_text.lower().strip()
+                    
+                    # Remove question mark if present
+                    if query_lower.endswith('?'):
+                        query_lower = query_lower[:-1].strip()
+                    
+                    # Check if the entire text is just a greeting
+                    if query_lower in greeting_patterns:
+                        return True
+                    
+                    # Check if it contains a greeting but also has more content
+                    words = query_lower.split()
+                    if len(words) > 3:  # If more than 3 words, likely not just a greeting
+                        return False
+                    
+                    # Check for just salutations like "hello there" or "hi how are you"
+                    simple_greetings = ["hi", "hello", "hey"]
+                    follow_ups = ["there", "how are you", "how's it going", "whats up", "what's up"]
+                    
+                    if any(greeting in words for greeting in simple_greetings):
+                        remaining = ' '.join([w for w in words if w not in simple_greetings])
+                        if not remaining or remaining in follow_ups:
+                            return True
+                    
+                    return False
+                
+                # Update first greeting detection block
+                should_save = True
+                # Check for math questions using simple heuristics
+                if any(char in query_text for char in ['+', '-', '*', '/', '=']) and any(c.isdigit() for c in query_text):
+                    should_save = False
+                # Check if it's ONLY a greeting with no substantive content
+                if is_only_greeting(query_text):
+                    should_save = False
+                # Check for system enquiries
+                system_enquiry_phrases = ["what are you", "how do you work", "what is your name", "what can you do"]
+                if any(phrase in query_text.lower() for phrase in system_enquiry_phrases):
+                    should_save = False
+                # Check for memory-related queries
+                if is_memory_related_query(query_text):
+                    should_save = False
+                
+                if json_data and isinstance(json_data, dict):
+                    # We got a valid JSON response
+                    structured_response = RAGResponse(
+                        answer=json_data.get("answer", ""),
+                        sources=json_data.get("sources"),
+                        memory_facts=json_data.get("memory_facts"),
+                        should_save=json_data.get("should_save", True)
+                    )
+                else:
+                    # Fallback to parsing the response manually
+                    extracted_sources = extract_sources(response_text)
+                    extracted_memory = extract_memory(response_text)
+                    clean_response_text = clean_response(response_text)
+                    
+                    # Use the is_only_greeting function to determine if it's just a greeting
+                    if is_only_greeting(query_text):
+                        should_save = False
+                    
+                    structured_response = RAGResponse(
+                        answer=clean_response_text,
+                        sources=extracted_sources,
+                        memory_facts=extracted_memory,
+                        should_save=should_save
+                    )
             
-            def clean_response(text: str) -> str:
-                """Remove SOURCES and MEMORY sections from the response"""
-                clean_text = text
-                if "SOURCES:" in clean_text:
-                    clean_text = clean_text.split("SOURCES:")[0].strip()
-                if "MEMORY:" in clean_text:
-                    clean_text = clean_text.split("MEMORY:")[0].strip()
-                return clean_text
+            except Exception as e:
+                logger.warning(f"Error with JSON parsing approach: {str(e)}, falling back to simple response")
+                # Fall back to a simple response without structured parsing
+                response_text = self.llm.predict(
+                    prompt=qa_tmpl,
+                    query_str=query_text,
+                    multimodal_context=retrieved_context,
+                    chat_context=chat_context,
+                    memory_facts_context=memory_facts_context
+                )
+                
+                # Use the is_only_greeting function here
+                should_save = True
+                # Check for math questions
+                if any(char in query_text for char in ['+', '-', '*', '/', '=']) and any(c.isdigit() for c in query_text):
+                    should_save = False
+                # Check if it's just a greeting
+                if is_only_greeting(query_text):
+                    should_save = False
+                # Check for system enquiries
+                system_enquiry_phrases = ["what are you", "how do you work", "what is your name", "what can you do"]
+                if any(phrase in query_text.lower() for phrase in system_enquiry_phrases):
+                    should_save = False
+                # Check for memory-related queries
+                if is_memory_related_query(query_text):
+                    should_save = False
+                
+                structured_response = RAGResponse(
+                    answer=response_text,
+                    sources=None,
+                    memory_facts=None,
+                    should_save=should_save
+                )
             
-            # Extract unique sources and memory from the response
-            extracted_sources = list(set(extract_sources(response_text) or []))
-            extracted_memory = extract_memory(response_text)
-            clean_response_text = clean_response(response_text)
-            
-            # Prepare response object
-            class MockResponse:
-                def __init__(self, response_str, source_nodes_list):
-                    self.response = response_str
-                    self.source_nodes = source_nodes_list
-            
-            response = MockResponse(clean_response_text, retrieved_nodes)
-            
-            # Extract unique sources from the LLM response only
-            extracted_sources = list(set(extract_sources(response_text) or []))
-            
-            # Store the interaction in memory if user is provided
-            if user and user.get('id'):
+            # Store the interaction in memory if user is provided and should_save is True
+            if user and user.get('id') and structured_response.should_save:
                 try:
                     memory_service = GraphitiMemoryService()
                     
@@ -370,14 +572,14 @@ class RAGService:
                     
                     # Add AI response to memory with sources
                     memory_sources_description = "ai assistant"
-                    if extracted_sources:
-                        source_list_str = ", ".join(extracted_sources)
+                    if structured_response.sources:
+                        source_list_str = ", ".join(structured_response.sources)
                         memory_sources_description = f"ai assistant with sources: {source_list_str}"
-                    elif extracted_memory:
+                    elif structured_response.memory_facts:
                         memory_sources_description = "ai assistant with memory facts"
                     
                     ai_message = Message(
-                        content=response.response,
+                        content=structured_response.answer,
                         role_type="assistant",
                         source_description=memory_sources_description,
                         name=f"ai-response-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -387,14 +589,17 @@ class RAGService:
                 except Exception as e:
                     logger.error(f"Error storing chat in memory for user_id {user.get('id')}: {str(e)}")
             else:
-                logger.warning("No user_id provided in user object, or user object not provided, skipping memory storage for RAG query")
+                if user and user.get('id'):
+                    logger.info(f"Skipping memory storage for query type that should not be saved: '{query_text[:30]}...'")
+                else:
+                    logger.warning("No user_id provided in user object, or user object not provided, skipping memory storage for RAG query")
             
-            # Return the response with only sources extracted from LLM response
+            # Return the response
             return ExtendedGraphRAGResponse(
-                answer=response.response,
+                answer=structured_response.answer,
                 images=None,
-                sources=extracted_sources if extracted_sources else None,
-                memory_facts=extracted_memory
+                sources=structured_response.sources,
+                memory_facts=structured_response.memory_facts
             )
         
         except Exception as e:

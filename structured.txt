@@ -1,0 +1,482 @@
+Using Structured LLMs#
+The highest-level way to extract structured data in LlamaIndex is to instantiate a Structured LLM. First, let’s instantiate our Pydantic class as previously:
+
+
+from datetime import datetime
+
+
+class LineItem(BaseModel):
+    """A line item in an invoice."""
+
+    item_name: str = Field(description="The name of this item")
+    price: float = Field(description="The price of this item")
+
+
+class Invoice(BaseModel):
+    """A representation of information from an invoice."""
+
+    invoice_id: str = Field(
+        description="A unique identifier for this invoice, often a number"
+    )
+    date: datetime = Field(description="The date this invoice was created")
+    line_items: list[LineItem] = Field(
+        description="A list of all the items in this invoice"
+    )
+If this is your first time using LlamaIndex, let’s get our dependencies:
+
+pip install llama-index-core llama-index-llms-openai to get the LLM (we’ll be using OpenAI for simplicity, but you can always use another one)
+Get an OpenAI API key and set it as an environment variable called OPENAI_API_KEY
+pip install llama-index-readers-file to get the PDFReader
+Note: for better parsing of PDFs, we recommend LlamaParse
+Now let’s load in the text of an actual invoice:
+
+
+from llama_index.readers.file import PDFReader
+from pathlib import Path
+
+pdf_reader = PDFReader()
+documents = pdf_reader.load_data(file=Path("./uber_receipt.pdf"))
+text = documents[0].text
+And let’s instantiate an LLM, give it our Pydantic class, and then ask it to complete using the plain text of the invoice:
+
+
+from llama_index.llms.openai import OpenAI
+
+llm = OpenAI(model="gpt-4o")
+sllm = llm.as_structured_llm(Invoice)
+
+response = sllm.complete(text)
+response is a LlamaIndex CompletionResponse with two properties: text and raw. text contains the JSON-serialized form of the Pydantic-ingested response:
+
+
+json_response = json.loads(response.text)
+print(json.dumps(json_response, indent=2))
+
+{
+    "invoice_id": "Visa \u2022\u2022\u2022\u20224469",
+    "date": "2024-10-10T19:49:00",
+    "line_items": [
+        {"item_name": "Trip fare", "price": 12.18},
+        {"item_name": "Access for All Fee", "price": 0.1},
+        {"item_name": "CA Driver Benefits", "price": 0.32},
+        {"item_name": "Booking Fee", "price": 2.0},
+        {"item_name": "San Francisco City Tax", "price": 0.21},
+    ],
+}
+Note that this invoice didn’t have an ID so the LLM has tried its best and used the credit card number. Pydantic validation is not a guarantee!
+
+The raw property of response (somewhat confusingly) contains the Pydantic object itself:
+
+
+from pprint import pprint
+
+pprint(response.raw)
+
+Invoice(
+    invoice_id="Visa ••••4469",
+    date=datetime.datetime(2024, 10, 10, 19, 49),
+    line_items=[
+        LineItem(item_name="Trip fare", price=12.18),
+        LineItem(item_name="Access for All Fee", price=0.1),
+        LineItem(item_name="CA Driver Benefits", price=0.32),
+        LineItem(item_name="Booking Fee", price=2.0),
+        LineItem(item_name="San Francisco City Tax", price=0.21),
+    ],
+)
+Note that Pydantic is creating a full datetime object and not just translating a string.
+
+A structured LLM works exactly like a regular LLM class: you can call chat, stream, achat, astream etc. and it will respond with Pydantic objects in all cases. You can also pass in your Structured LLM as a parameter to VectorStoreIndex.as_query_engine(llm=sllm) and it will automatically respond to your RAG queries with structured objects.
+
+The Structured LLM takes care of all the prompting for you. If you want more control over the prompt, move on to Structured Prediction.
+
+
+Implementing Structured Output in LlamaIndex — Easy Way and Hard Way
+Fu-Chun Hsu
+Fu-Chun Hsu
+
+Follow
+5 min read
+·
+Dec 2, 2024
+1
+
+
+
+
+
+
+Prompt Summarize or Pydantic Output Parser?
+In modern AI applications, extracting valuable information from large amounts of unstructured data and presenting it in a clear, understandable, and actionable format has become a critical challenge. Whether it’s legal documents, financial reports, or other types of textual data, structured output plays a crucial role in providing clear and organized results, enabling users to quickly extract key information. This article explores how LlamaIndex can achieve this through prompt summaries and structured LLMs.
+
+1. Why Do We Need Structured Output?
+Structured output transforms complex or unorganized data into a format that is easy to analyze and process, such as a dictionary, list, or JSON. This format enhances data readability and processing efficiency, which is especially vital for data-driven applications. For instance, in legal contract analysis, structured output can extract key clauses, helping users quickly understand the main points of the contract, and enabling further processing by directly importing the data into databases or spreadsheets. In contrast, unstructured data is typically presented in long text formats, making it harder to extract specific information and prone to misinterpretation or loss. Structured output effectively reduces these issues, improving processing accuracy and efficiency.
+
+2. Using Prompts and Post-Processing to Define Structure
+Without relying on any additional packages or the four methods provided by LlamaIndex, you can directly use a prompt to define the structure you want to extract, and then use llm_model.complete(PROMPT) to output the response. Below is an example of a prompt and some sample code.
+
+However, using post-processing to structure output can become cumbersome when dealing with deeply nested structures, where defining and extracting the necessary information can become challenging. Let’s explore how LlamaIndex handles this issue.
+
+from llama_index.core.prompts import PromptTemplate
+
+DEFAULT_LEGAL_CONTRACT_PROMPT = """
+You are an excellent legal assistant, highly skilled at summarizing large amounts of text.
+The following content, enclosed in ''' brackets, is the text of a financial contract. Please generate a summary of the contract, keeping it under 1,000 Chinese characters. The summary should include the following items:
+
+1. Vendor Name: The name of the contracting vendor.
+2. Procurement Item: The item being procured in this contract.
+3. Procurement Purpose: The purpose of the procurement in this contract.
+4. Contract Type: Whether it is a new contract or a renewal. If a similar contract was previously signed, please include the previous contract/file number.
+5. Contract Amount: The total amount of this contract, in New Taiwan Dollars (TWD).
+"""
+
+formatted_prompt = PromptTemplate(DEFAULT_LEGAL_CONTRACT_PROMPT).format(text=contract_file)
+response = llm_model.complete(formatted_prompt).text.strip()
+
+structured_output = {}
+for line in response.splitlines():
+    if ": " in line:
+        key, value = line.split(": ", 1)
+        cleaned_key = key.strip().split(". ", 1)[-1]
+        english_key = TRANSLATION_MAP.get(cleaned_key, cleaned_key)
+        structured_output[english_key] = value.strip()
+
+# structured_output = 
+{
+  "vendor_name": "XYZ Software Corporation",
+  "procurement_item": "Maintenance Services",
+  "procurement_purpose": "Provide maintenance services to ensure the equipment operates normally",
+  "contract_type": "New Contract",
+  "contract_amount": "NTD 610,000"
+}
+3. LlamaIndex’s Structured Output Methods
+LlamaIndex offers several methods to implement structured output, each suited for different use cases and advantages. Below are the four most common implementation approaches:
+
+(1) Structured Output in the LLM Class
+By default, LlamaIndex provides structured output within its LLM classes. This means that you can directly use the API provided by LlamaIndex, and the model will automatically format the output into structured data without any extra processing required.
+
+For example, the following code directly enables the LLM to output the expected structured format:
+
+# Using Settings.llm, set your LLM within your environment
+Settings.llm = AzureOpenAI(
+    engine=AZURE_LLM_DEPLOYMENT,
+    model=AZURE_LLM_MODEL,
+    api_key=AZURE_LLM_API_KEY,
+    azure_endpoint=AZURE_LLM_ENDPOINT,
+    api_version=AZURE_LLM_API_VERSION,
+    temperature=0.0,
+)
+
+llm_model = Settings.llm
+
+# FinanceTerms is our Pydantic class that defines the structured data to extract
+class FinanceTerms(BaseModel):
+    """Representative information extracted from financial procurement contracts. You are a highly skilled legal assistant, proficient in summarizing large amounts of text."""
+
+    # Translated fields based on the TRANSLATION_MAP
+    vendor_name: str = Field(description="Name of the vendor")
+    procurement_item: str = Field(description="Details of the item being procured in this contract")
+    procurement_purpose: str = Field(description="Purpose of the procurement in this contract")
+    contract_type: str = Field(description="Type of contract, whether it's a new contract or a renewal. If a similar contract was signed previously, please include the previous contract/file number.")
+    contract_amount: str = Field(description="Total contract amount in New Taiwan Dollar (TWD)")
+
+sllm = llm_model.as_structured_llm(FinanceTerms)
+
+reader = SimpleDirectoryReader(input_files=[file_name])
+documents = reader.load_data()
+contract_file = "\n".join([doc.text for doc in documents])
+
+response = sllm.complete(contract_file)
+(2) Pydantic Class
+The Pydantic class is a flexible module that maps input prompts to structured output, represented as a Pydantic object. These programs can use function calling APIs or text completion APIs combined with output parsers. Additionally, Pydantic programs can be integrated with query engines to return structured results. This ensures that the output strictly adheres to the desired format.
+
+(3) Predefined Pydantic Programs
+LlamaIndex also provides several predefined Pydantic programs, which map specific inputs to pre-defined output formats, such as DataFrames. These predefined programs simplify the development process, making it easy for developers to apply structured output to common data processing scenarios.
+
+(4) Output Parsers
+Output parsers are modules that operate before and after the LLM’s text completion endpoint. They are responsible for processing the text output and converting it into structured data. These parsers are not used with LLM function calling endpoints, as those endpoints already provide structured output by default.
+
+4. Comparing Structured Output Methods
+When comparing the effectiveness of these methods, we not only look at the final output but also analyze the resources used (e.g., token counts) and the efficiency of model processing. The following code demonstrates how to calculate and display token usage for each step using LlamaIndex’s token_counter, which is crucial for optimizing performance. The token usage may vary based on different scenarios and applications. However, in tests, using prompt+complete typically saves about half the tokens compared to using llm.as_structured_llm.
+
+import tiktoken
+from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
+
+token_counter = TokenCountingHandler(
+    tokenizer=tiktoken.encoding_for_model("gpt-4o-mini").encode
+)
+
+callback_manager = CallbackManager([token_counter])
+Settings.callback_manager = callback_manager
+...
+# YOUR LLM RUNS HERE
+
+for token in token_counter.llm_token_counts:
+    print("==============")
+    print("prompt token count: ", token.prompt_token_count, "\n")
+    print("completion: ", token.completion, "...\n")
+    print("completion token count: ", token.completion_token_count, "\n")
+    print("total token count", token.total_token_count)
+5. Conclusion
+Through LlamaIndex, we can effectively generate structured output while maintaining high performance when processing large-scale data. In this example, we demonstrated how to use Azure OpenAI’s model to process legal contract text and convert the generated response into structured data. This architecture is not limited to the legal field but can also be applied to other text data that requires structured processing.
+
+Structured output provides a more efficient and scalable way to handle language model responses, helping to improve the accuracy and readability of data processing. For developers looking to apply AI technology across various business scenarios, this is undoubtedly a valuable tool.
+
+
+from typing import List
+from pydantic import BaseModel, Field
+
+
+class Song(BaseModel):
+    """Data model for a song."""
+
+    title: str
+    length_seconds: int
+
+
+class Album(BaseModel):
+    """Data model for an album."""
+
+    name: str
+    artist: str
+    songs: List[Song]
+
+from llama_index.core.llms import ChatMessage
+
+sllm = llm.as_structured_llm(output_cls=Album)
+input_msg = ChatMessage.from_str("Generate an example album from The Shining")
+
+response = sllm.chat([input_msg])   
+
+
+
+OpenAI JSON Mode vs. Function Calling for Data Extraction
+OpenAI just released JSON Mode: This new config constrain the LLM to only generate strings that parse into valid JSON (but no guarantee on validation against any schema).
+
+Before this, the best way to extract structured data from text is via function calling.
+
+In this notebook, we explore the tradeoff between the latest JSON Mode and function calling feature for structured output & extraction.
+
+Update: OpenAI has clarified that JSON mode is always enabled for function calling, it's opt-in for regular messages (https://community.openai.com/t/json-mode-vs-function-calling/476994/4)
+
+Generate synthetic data
+We'll start by generating some synthetic data for our data extraction task. Let's ask our LLM for a hypothetical sales transcript.
+
+%pip install llama-index-llms-openai
+%pip install llama-index-program-openai
+from llama_index.llms.openai import OpenAI
+
+llm = OpenAI(model="gpt-3.5-turbo-1106")
+response = llm.complete(
+    "Generate a sales call transcript, use real names, talk about a product, discuss some action items"
+)
+transcript = response.text
+print(transcript)
+[Phone rings]
+
+John: Hello, this is John.
+
+Sarah: Hi John, this is Sarah from XYZ Company. I'm calling to discuss our new product, the XYZ Widget, and see if it might be a good fit for your business.
+
+John: Hi Sarah, thanks for reaching out. I'm definitely interested in learning more about the XYZ Widget. Can you give me a quick overview of what it does?
+
+Sarah: Of course! The XYZ Widget is a cutting-edge tool that helps businesses streamline their workflow and improve productivity. It's designed to automate repetitive tasks and provide real-time data analytics to help you make informed decisions.
+
+John: That sounds really interesting. I can see how that could benefit our team. Do you have any case studies or success stories from other companies who have used the XYZ Widget?
+
+Sarah: Absolutely, we have several case studies that I can share with you. I'll send those over along with some additional information about the product. I'd also love to schedule a demo for you and your team to see the XYZ Widget in action.
+
+John: That would be great. I'll make sure to review the case studies and then we can set up a time for the demo. In the meantime, are there any specific action items or next steps we should take?
+
+Sarah: Yes, I'll send over the information and then follow up with you to schedule the demo. In the meantime, feel free to reach out if you have any questions or need further information.
+
+John: Sounds good, I appreciate your help Sarah. I'm looking forward to learning more about the XYZ Widget and seeing how it can benefit our business.
+
+Sarah: Thank you, John. I'll be in touch soon. Have a great day!
+
+John: You too, bye.
+Setup our desired schema
+Let's specify our desired output "shape", as a Pydantic Model.
+
+from pydantic import BaseModel, Field
+from typing import List
+
+
+class CallSummary(BaseModel):
+    """Data model for a call summary."""
+
+    summary: str = Field(
+        description="High-level summary of the call transcript. Should not exceed 3 sentences."
+    )
+    products: List[str] = Field(
+        description="List of products discussed in the call"
+    )
+    rep_name: str = Field(description="Name of the sales rep")
+    prospect_name: str = Field(description="Name of the prospect")
+    action_items: List[str] = Field(description="List of action items")
+Data extraction with function calling
+We can use the OpenAIPydanticProgram module in LlamaIndex to make things super easy, simply define a prompt template, and pass in the LLM and pydantic model we've definied.
+
+from llama_index.program.openai import OpenAIPydanticProgram
+from llama_index.core import ChatPromptTemplate
+from llama_index.core.llms import ChatMessage
+prompt = ChatPromptTemplate(
+    message_templates=[
+        ChatMessage(
+            role="system",
+            content=(
+                "You are an expert assitant for summarizing and extracting insights from sales call transcripts."
+            ),
+        ),
+        ChatMessage(
+            role="user",
+            content=(
+                "Here is the transcript: \n"
+                "------\n"
+                "{transcript}\n"
+                "------"
+            ),
+        ),
+    ]
+)
+program = OpenAIPydanticProgram.from_defaults(
+    output_cls=CallSummary,
+    llm=llm,
+    prompt=prompt,
+    verbose=True,
+)
+output = program(transcript=transcript)
+Function call: CallSummary with args: {"summary":"Sarah from XYZ Company called to discuss the new product, the XYZ Widget, which John expressed interest in. Sarah offered to share case studies and schedule a demo. They agreed to review the case studies and set up a time for the demo. The next steps include Sarah sending over information and following up to schedule the demo.","products":["XYZ Widget"],"rep_name":"Sarah","prospect_name":"John","action_items":["Review case studies","Schedule demo"]}
+We now have the desired structured data, as a Pydantic Model. Quick inspection shows that the results are as we expected.
+
+output.dict()
+{'summary': 'Sarah from XYZ Company called to discuss the new product, the XYZ Widget, which John expressed interest in. Sarah offered to share case studies and schedule a demo. They agreed to review the case studies and set up a time for the demo. The next steps include Sarah sending over information and following up to schedule the demo.',
+ 'products': ['XYZ Widget'],
+ 'rep_name': 'Sarah',
+ 'prospect_name': 'John',
+ 'action_items': ['Review case studies', 'Schedule demo']}
+Data extraction with JSON mode
+Let's try to do the same with JSON mode, instead of function calling
+
+prompt = ChatPromptTemplate(
+    message_templates=[
+        ChatMessage(
+            role="system",
+            content=(
+                "You are an expert assitant for summarizing and extracting insights from sales call transcripts.\n"
+                "Generate a valid JSON following the given schema below:\n"
+                "{json_schema}"
+            ),
+        ),
+        ChatMessage(
+            role="user",
+            content=(
+                "Here is the transcript: \n"
+                "------\n"
+                "{transcript}\n"
+                "------"
+            ),
+        ),
+    ]
+)
+messages = prompt.format_messages(
+    json_schema=CallSummary.schema_json(), transcript=transcript
+)
+output = llm.chat(
+    messages, response_format={"type": "json_object"}
+).message.content
+We get a vaid JSON, but it's only regurgitating the schema we specified, and not actually doing the extraction.
+
+print(output)
+{
+  "title": "CallSummary",
+  "description": "Data model for a call summary.",
+  "type": "object",
+  "properties": {
+    "summary": {
+      "title": "Summary",
+      "description": "High-level summary of the call transcript. Should not exceed 3 sentences.",
+      "type": "string"
+    },
+    "products": {
+      "title": "Products",
+      "description": "List of products discussed in the call",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rep_name": {
+      "title": "Rep Name",
+      "description": "Name of the sales rep",
+      "type": "string"
+    },
+    "prospect_name": {
+      "title": "Prospect Name",
+      "description": "Name of the prospect",
+      "type": "string"
+    },
+    "action_items": {
+      "title": "Action Items",
+      "description": "List of action items",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["summary", "products", "rep_name", "prospect_name", "action_items"]
+}
+Let's try again by just showing the JSON format we want, instead of specifying the schema
+
+import json
+
+prompt = ChatPromptTemplate(
+    message_templates=[
+        ChatMessage(
+            role="system",
+            content=(
+                "You are an expert assitant for summarizing and extracting insights from sales call transcripts.\n"
+                "Generate a valid JSON in the following format:\n"
+                "{json_example}"
+            ),
+        ),
+        ChatMessage(
+            role="user",
+            content=(
+                "Here is the transcript: \n"
+                "------\n"
+                "{transcript}\n"
+                "------"
+            ),
+        ),
+    ]
+)
+
+dict_example = {
+    "summary": "High-level summary of the call transcript. Should not exceed 3 sentences.",
+    "products": ["product 1", "product 2"],
+    "rep_name": "Name of the sales rep",
+    "prospect_name": "Name of the prospect",
+    "action_items": ["action item 1", "action item 2"],
+}
+
+json_example = json.dumps(dict_example)
+messages = prompt.format_messages(
+    json_example=json_example, transcript=transcript
+)
+output = llm.chat(
+    messages, response_format={"type": "json_object"}
+).message.content
+Now we are able to get the extracted structured data as we expected.
+
+print(output)
+{
+  "summary": "Sarah from XYZ Company called John to discuss the new product, the XYZ Widget, which is designed to streamline workflow and improve productivity. They discussed case studies and scheduling a demo for John and his team. The next steps include Sarah sending over information and following up to schedule the demo.",
+  "products": ["XYZ Widget"],
+  "rep_name": "Sarah",
+  "prospect_name": "John",
+  "action_items": ["Review case studies", "Schedule demo"]
+}
+Quick Takeaways
+Function calling remains easier to use for structured data extraction (especially if you have already specified your schema as e.g. a pydantic model)
+While JSON mode enforces the format of the output, it does not help with validation against a specified schema. Directly passing in a schema may not generate expected JSON and may require additional careful formatting and prompting.

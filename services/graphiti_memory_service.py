@@ -56,26 +56,85 @@ class AsyncWorker:
     def __init__(self):
         self.queue = asyncio.Queue()
         self.task = None
+        self.max_retries = 3  # Maximum number of retries for a job
 
     async def worker(self):
         while True:
             try:
                 print(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
                 job = await self.queue.get()
-                await job()
+                
+                # Wrap the job in retry logic
+                retry_count = 0
+                while retry_count <= self.max_retries:
+                    try:
+                        await job()
+                        # If job succeeds, break out of retry loop
+                        break
+                    except Exception as e:
+                        # Check if error is from graphiti_core
+                        error_module = e.__class__.__module__
+                        is_graphiti_error = error_module.startswith('graphiti_core')
+                        
+                        # Increment retry count
+                        retry_count += 1
+                        
+                        if is_graphiti_error and retry_count <= self.max_retries:
+                            # Log the error but retry the job
+                            logger.warning(f"Graphiti core error: {e.__class__.__name__}: {str(e)}. Retrying job ({retry_count}/{self.max_retries})...")
+                            # Wait a bit before retrying with exponential backoff
+                            await asyncio.sleep(5 * retry_count)
+                        else:
+                            # For non-graphiti errors or after max retries, log and break
+                            if is_graphiti_error:
+                                logger.error(f"Max retries reached for graphiti_core error: {e.__class__.__name__}: {str(e)}")
+                            else:
+                                logger.error(f"Non-graphiti error in job: {e.__class__.__name__}: {str(e)}")
+                            break
+                
+                # Mark job as done regardless of outcome
+                self.queue.task_done()
                 await asyncio.sleep(25)  # Add a small delay to prevent rate limiting
             except asyncio.CancelledError:
+                # Handle worker cancellation
                 break
+            except Exception as e:
+                # Catch-all for worker-level exceptions to keep the worker alive
+                logger.error(f"Critical error in worker: {e.__class__.__name__}: {str(e)}")
+                await asyncio.sleep(10)  # Brief pause before continuing
 
     async def start(self):
         self.task = asyncio.create_task(self.worker())
 
     async def stop(self):
-        if self.task:
-            self.task.cancel()
-            await self.task
-        while not self.queue.empty():
-            self.queue.get_nowait()
+        """Gracefully stop the worker and clear any pending jobs"""
+        try:
+            if self.task:
+                self.task.cancel()
+                try:
+                    await self.task
+                except asyncio.CancelledError:
+                    # Expected cancellation
+                    pass
+                except Exception as e:
+                    # Log any other errors during task cancellation
+                    logger.error(f"Error during AsyncWorker task cancellation: {str(e)}")
+            
+            # Clear the queue safely
+            while not self.queue.empty():
+                try:
+                    self.queue.get_nowait()
+                    self.queue.task_done()
+                except Exception:
+                    # Queue may have changed during iteration
+                    pass
+            
+            logger.info("AsyncWorker stopped and queue cleared")
+        except Exception as e:
+            logger.error(f"Error during AsyncWorker shutdown: {str(e)}")
+            # Even if there's an error, we want to ensure task is properly cancelled
+            if self.task and not self.task.cancelled():
+                self.task.cancel()
 
 
 async_worker = AsyncWorker()
@@ -119,9 +178,21 @@ class GraphitiMemoryService:
     
     @classmethod
     async def shutdown_worker(cls):
-        """Shutdown the async worker"""
-        await async_worker.stop()
-        logger.info("Stopped AsyncWorker for GraphitiMemoryService")
+        """Shutdown the async worker gracefully, handling any errors"""
+        try:
+            logger.info("Attempting to shut down AsyncWorker gracefully...")
+            await async_worker.stop()
+            logger.info("Stopped AsyncWorker for GraphitiMemoryService")
+        except Exception as e:
+            logger.error(f"Error during AsyncWorker shutdown: {e.__class__.__name__}: {str(e)}")
+            # Force cancel task if still running
+            if async_worker.task and not async_worker.task.cancelled():
+                try:
+                    async_worker.task.cancel()
+                    logger.info("Forcefully cancelled AsyncWorker task")
+                except Exception:
+                    logger.error("Failed to forcefully cancel AsyncWorker task")
+            logger.info("AsyncWorker shutdown completed with errors")
     
     async def initialize(self):
         """Initialize the service and create necessary indices and constraints"""
