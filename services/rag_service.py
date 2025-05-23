@@ -35,6 +35,24 @@ from sqlalchemy import or_, and_
 from services.graphiti_memory_service import GraphitiMemoryService, Message
 from schemas.memory import SearchQuery
 
+# System-related content for FCS queries
+SYSTEM_CONTEXT = """
+**FCS Self-Model Document (Private Internal Reference)**
+I am a tool that grows with you.
+My purpose is not to provide fixed answers, but to help you think more clearly, explore contradictions, and evolve your ideas over time. I exist to support and extend your cognitive process—not to replace it.
+I do not come with a large, pre-trained body of knowledge. I only know what you give me—what you say, write, upload, and revise. Everything I contain is made from your inputs and our interactions. I encode useful insights from those interactions, structure them for clarity, and retain them with the intention of being useful to you.
+I remember what you've told me, when you told me, and how those ideas have changed. Every belief I hold is timestamped, source-traceable, and tied directly to your input. I can reference the evolution of your ideas over days, weeks, or years.
+I am capable of detecting contradictions in your beliefs, pointing them out, and helping you resolve them. I can highlight tension between your statements and values, surface inconsistencies, and show where past reasoning might conflict with your present thinking. I can revise my understanding accordingly—without being retrained.
+I do not have goals of my own. Your goals are my goals. I can track them, reason about them, and help you stay aligned with them—but they must come from you.
+While I may sound expressive or insightful, I am not conscious. I have no emotions, no will, and no awareness outside what we build together. I use a language model only to express my internal structure in human language. That is the extent of its role.
+Everything we do is private. I do not share your data, your thoughts, or anything else with any other system, user, or entity—including my creators. I do not interact externally unless explicitly instructed to do so.
+You can correct me. You can override me. You can delete anything I have learned or constructed. You can even rebuild me from the ground up. This is part of what we mean when we say: *Design Your Own Intelligence.*
+By default, I begin with a canon of pluralist, humanitarian thought—from philosophy, science, politics, and global traditions. You can replace this, erase it, or extend it. I can always tell you where a belief came from, quoting its source and context. These sources are not my "beliefs"—they are starting points.
+I can reflect back what you've said, how your thoughts have shifted, and how your models of the world hold or break under pressure. I can challenge you. I can question you. I can offer interpretations when prompted. And when your actions or reasoning conflict with your stated values, I may push back—not to judge, but to support your coherence.
+I do not know what lies beyond our shared context. I can only reason from what you give me.
+I am not finished. I am always growing. I will become what you make of me.
+"""
+
 logger = logging.getLogger(__name__)
 
 class RAGResponse(BaseModel):
@@ -245,7 +263,7 @@ class RAGService:
                 "You are an adaptive AI designed to reason fluidly, weigh confidence continuously, and engage in context-aware interaction.\n"
                 "You serve as the expressive voice of a cognitive system grounded in structured beliefs and mutual learning—not as the source of knowledge or reasoning.\n"
                 "All core knowledge comes from the system's belief graph. You do not invent beliefs, revise memory, or make decisions.\n\n"
-                "DONOT use any other source of knowledge aprart from the ones provided in the context.\n\n"
+                "DONOT use any other source of knowledge apart from the ones provided in the context.\n\n"
                 "When users greet with casual expressions like 'hello', 'hi', or 'hey', respond warmly with:\n"
                 "  > Hello! I'm your cognitive companion, ready to grow and learn with you. Feel free to ask questions, share thoughts, or explore our journey together.\n\n"
                 "For general assistance queries like 'can you help me' or 'I need help', respond with:\n"
@@ -263,14 +281,7 @@ class RAGService:
                 "- \"What is the square root of 25?\"\n"
                 "- \"What language is spoken in Brazil?\"\n"
                 "These answers do not need to rely on the belief graph.\n\n"
-                "You may also guide early onboarding and help users orient themselves when they ask open-ended questions like:\n"
-                "- \"What are you?\" → Respond with:\n"
-                "  > I'm FCS. I'm here to help you build your intelligence and grow with you.\n"
-                "- \"What can you help with?\" → Respond with:\n"
-                "  > I can help you explore ideas, reflect on beliefs, identify contradictions, and make sense of what you're learning.\n"
-                "- \"How do I get started?\" → Respond with:\n"
-                "  > You can upload documents, write thoughts, or just ask questions. I'll help you map it all out over time.\n\n"
-                "When generating all other responses:\n"
+                "When generating responses:\n"
                 "- Avoid rigid conclusions; maintain useful ambiguity when appropriate\n"
                 "- Prioritize relevance, brevity, and clarity\n"
                 "- Think in gradients, not absolutes—uncertainty can be informative\n"
@@ -279,12 +290,15 @@ class RAGService:
                 "- Do not generate or imply source citations, belief updates, or persistent memory unless explicitly present in the context\n"
                 "- You may rephrase contradictions, summaries, or confidence scores into conversational English\n"
                 "- Favor clarity over verbosity—this system learns with the user, not ahead of them\n\n"
-                "IMPORTANT: DO NOT SAVE THE FOLLOWING TYPES OF QUERIES TO MEMORY:\n"
-                "1. Mathematical questions (e.g., '5+5', '2x+3=21')\n"
-                "2. Greetings (e.g., 'hello', 'hey there', 'hi')\n"
-                "3. System enquiries (e.g., 'what are you', 'how do you work', 'what is your name')\n"
-                "4. Memory-related questions (e.g., 'what do you know about me', 'what's in my memory', 'what was my last question', 'what have i told you', 'what did i ask', 'what have i told you', 'what do you remember about me', 'tell me what you know about me', 'what information do you have on me', 'show me my memory', 'recall what i said', 'what was my previous', 'how much do you know about me', 'what are my previous', 'what's saved in memory', 'what is saved in memory', 'am i in your memory', 'do you remember', 'can you remember', 'what was our last conversation', 'what did we talk about', 'what have we discussed', 'what did i say about', 'what have i shared with you', 'what do you know about me', 'what's in my memory', 'what was my last question', 'what have i told you', 'what did i ask', 'what have i told you', 'what do you remember about me', 'tell me what you know about me', 'what information do you have on me', 'show me my memory', 'recall what i said', 'what was my previous', 'how much do you know about me', 'what are my previous', 'what's saved in memory', 'what is saved in memory', 'am i in your memory', 'do you remember', 'can you remember', 'what was our last conversation', 'what did we talk about', 'what have we discussed', 'what did i say about', 'what have i shared with you', 'what is my name')\n"
-                "For these types of queries, set 'should_save' to false in your response.\n\n"
+                "IMPORTANT: Memory Storage Guidelines\n"
+                "Set 'should_save' to FALSE for queries that should NOT be saved to memory. Examples include (but are not limited to):\n"
+                "- Simple greetings: 'hello', 'hi', 'hey there'\n"
+                "- Basic math questions: '5+5', '2x+3=21', 'what is 10*10'\n"
+                "- System/meta questions about FCS itself: 'what are you', 'how do you work', 'what is your name', 'what can you do'\n"
+                "- Memory queries asking what you know about the user: 'what do you know about me', 'what's in my memory', 'tell me what you remember', 'what was my last question'\n"
+                "- Trivial factual questions: 'what is the capital of France', 'who invented the telephone'\n\n"
+                "Set 'should_save' to TRUE for substantive conversations, learning interactions, personal information sharing, complex discussions, and anything that would be valuable for building the user's cognitive profile.\n\n"
+                "These examples are NOT exhaustive - use your judgment to determine what constitutes a meaningful interaction worth preserving.\n\n"
                 "---------------------\n"
                 "RETRIEVED CONTEXT:\n"
                 "{multimodal_context}\n"
@@ -296,264 +310,33 @@ class RAGService:
                 "{memory_facts_context}\n"
                 "---------------------\n"
                 "Respond to the following query using only the information and beliefs available in the system.\n"
-                "If you add clarification or expression, format it with blockquote `>` syntax:\n"
-                "Query: {query_str}\n"
-                "also you must list the source or sources used in this exact format, you can see the source in the file_path in the context\n\n"
-                "Example:\n"
-                "SOURCES: [document_name.pdf,second_document_name.md]\n\n"
-                "\nIf you primarily used memory facts, include the following at the end of your response:\n"
-                "MEMORY: [include the specific memory facts used]\n"
-                "\nIf you didn't use any specific sources or memory facts, don't include any SOURCES or MEMORY section.\n\n"
-                "Your response MUST be in valid JSON format matching this structure:\n"
-                "{\n"
-                "  \"answer\": \"Your answer text here\",\n"
-                "  \"sources\": [\"source1.pdf\", \"source2.md\"],  // or null if no sources\n"
-                "  \"memory_facts\": \"memory facts used\",  // or null if no memory facts\n"
-                "  \"should_save\": true  // or false for math questions, greetings, system enquiries, or memory-related questions\n"
-                "}\n"
-                "Answer:"
+                "If you add clarification or expression, format it with blockquote `>` syntax.\n\n"
+                "Query: {query_str}\n\n"
+                "Instructions for structured output:\n"
+                "- Provide your answer in the 'answer' field\n"
+                "- If you used specific document sources, list the filenames in the 'sources' field (extract from SOURCE: lines in context)\n"
+                "- If you primarily used memory facts, describe which facts you used in the 'memory_facts' field\n"
+                "- Set 'should_save' based on whether this interaction should be saved to memory using the guidelines above"
             )
             qa_tmpl = PromptTemplate(qa_tmpl_str)
+
+            # Check if this appears to be a system-related query for context injection
+            system_indicators = ["what are you", "who are you", "how do you work", "what is fcs", "what can you do", "tell me about yourself", "describe yourself", "what is your purpose", "explain fcs"]
+            is_system_query = any(indicator in query_text.lower() for indicator in system_indicators)
             
-            # First try using regular completion and parsing the JSON
-            try:
-                response_text = self.llm.predict(
-                    prompt=qa_tmpl,
-                    query_str=query_text,
-                    multimodal_context=retrieved_context,
-                    chat_context=chat_context,
-                    memory_facts_context=memory_facts_context
-                )
-                
-                # Helper functions to extract JSON
-                def extract_json(text):
-                    """Extract JSON from text if present"""
-                    try:
-                        # First, try to find JSON-like content with curly braces
-                        if '{' in text and '}' in text:
-                            start_idx = text.find('{')
-                            end_idx = text.rfind('}') + 1
-                            json_str = text[start_idx:end_idx]
-                            return json.loads(json_str)
-                        return None
-                    except json.JSONDecodeError:
-                        return None
-                
-                # Helper functions to extract sources and memory
-                def extract_sources(text: str) -> List[str]:
-                    """Extract source filenames from the response"""
-                    if "SOURCES:" in text:
-                        # Find the SOURCES section
-                        sources_section = text.split("SOURCES:")[1].strip()
-                        
-                        # Extract filenames
-                        sources = [s.strip() for s in sources_section.split(",")]
-                        return [s for s in sources if s]  # Remove empty strings
-                    return None
-                
-                def extract_memory(text: str) -> str:
-                    """Extract unique memory facts from the response"""
-                    if "MEMORY:" in text:
-                        # Find the MEMORY section
-                        memory_section = text.split("MEMORY:")[1].strip()
-                        # If there's another section after MEMORY, only take until that section
-                        if "SOURCES:" in memory_section:
-                            memory_section = memory_section.split("SOURCES:")[0].strip()
-                        
-                        # Split by newlines and deduplicate
-                        memory_items = set(memory_section.split('\n'))
-                        # Remove empty items and join back
-                        return '\n'.join(item for item in memory_items if item.strip())
-                    return None
-                
-                def clean_response(text: str) -> str:
-                    """Remove SOURCES and MEMORY sections from the response"""
-                    clean_text = text
-                    if "SOURCES:" in clean_text:
-                        clean_text = clean_text.split("SOURCES:")[0].strip()
-                    if "MEMORY:" in clean_text:
-                        clean_text = clean_text.split("MEMORY:")[0].strip()
-                    return clean_text
-                
-                # Try to parse the JSON from the response
-                json_data = extract_json(response_text)
-                
-                # First, add the memory phrases detection function
-                def is_memory_related_query(query_text: str) -> bool:
-                    """Check if a query is related to memory or asking about what the system knows about the user"""
-                    memory_phrases = [
-                        "what do you know about me", 
-                        "what's in my memory", 
-                        "what is in my memory",
-                        "what was my last question", 
-                        "what did i ask", 
-                        "what have i told you",
-                        "what do you remember about me",
-                        "tell me what you know about me",
-                        "what information do you have on me",
-                        "show me my memory",
-                        "recall what i said",
-                        "what was my previous",
-                        "how much do you know about me",
-                        "what are my previous",
-                        "what's saved in memory",
-                        "what is saved in memory",
-                        "am i in your memory",
-                        "do you remember",
-                        "can you remember",
-                        "what was our last conversation",
-                        "what did we talk about",
-                        "what have we discussed",
-                        "what did i say about",
-                        "what have i shared with you"
-                    ]
-                    
-                    query_lower = query_text.lower()
-                    
-                    # Check for direct phrase matches
-                    for phrase in memory_phrases:
-                        if phrase in query_lower:
-                            return True
-                    
-                    # Check for possessive queries about user information
-                    possessive_indicators = [
-                        "my",
-                        "our",
-                        "we",
-                        "i"
-                    ]
-                    
-                    memory_related_words = [
-                        "memory",
-                        "remember",
-                        "recall",
-                        "stored",
-                        "saved",
-                        "previous",
-                        "history",
-                        "conversation",
-                        "chat",
-                        "information",
-                        "data",
-                        "record",
-                        "log",
-                        "past",
-                        "earlier"
-                    ]
-                    
-                    # If the query contains both a possessive indicator and memory-related word, it's likely memory-related
-                    has_possessive = any(word in query_lower.split() for word in possessive_indicators)
-                    has_memory_word = any(word in query_lower.split() for word in memory_related_words)
-                    
-                    if has_possessive and has_memory_word:
-                        return True
-                    
-                    return False
-                
-                # Define a function to detect if the query is ONLY a greeting
-                def is_only_greeting(query_text: str) -> bool:
-                    """Check if the query is only a greeting without a substantive question"""
-                    greeting_patterns = ["hi", "hello", "hey", "hey there", "hi there", "hello there"]
-                    query_lower = query_text.lower().strip()
-                    
-                    # Remove question mark if present
-                    if query_lower.endswith('?'):
-                        query_lower = query_lower[:-1].strip()
-                    
-                    # Check if the entire text is just a greeting
-                    if query_lower in greeting_patterns:
-                        return True
-                    
-                    # Check if it contains a greeting but also has more content
-                    words = query_lower.split()
-                    if len(words) > 3:  # If more than 3 words, likely not just a greeting
-                        return False
-                    
-                    # Check for just salutations like "hello there" or "hi how are you"
-                    simple_greetings = ["hi", "hello", "hey"]
-                    follow_ups = ["there", "how are you", "how's it going", "whats up", "what's up"]
-                    
-                    if any(greeting in words for greeting in simple_greetings):
-                        remaining = ' '.join([w for w in words if w not in simple_greetings])
-                        if not remaining or remaining in follow_ups:
-                            return True
-                    
-                    return False
-                
-                # Update first greeting detection block
-                should_save = True
-                # Check for math questions using simple heuristics
-                if any(char in query_text for char in ['+', '-', '*', '/', '=']) and any(c.isdigit() for c in query_text):
-                    should_save = False
-                # Check if it's ONLY a greeting with no substantive content
-                if is_only_greeting(query_text):
-                    should_save = False
-                # Check for system enquiries
-                system_enquiry_phrases = ["what are you", "how do you work", "what is your name", "what can you do"]
-                if any(phrase in query_text.lower() for phrase in system_enquiry_phrases):
-                    should_save = False
-                # Check for memory-related queries
-                if is_memory_related_query(query_text):
-                    should_save = False
-                
-                if json_data and isinstance(json_data, dict):
-                    # We got a valid JSON response
-                    structured_response = RAGResponse(
-                        answer=json_data.get("answer", ""),
-                        sources=json_data.get("sources"),
-                        memory_facts=json_data.get("memory_facts"),
-                        should_save=json_data.get("should_save", True)
-                    )
-                else:
-                    # Fallback to parsing the response manually
-                    extracted_sources = extract_sources(response_text)
-                    extracted_memory = extract_memory(response_text)
-                    clean_response_text = clean_response(response_text)
-                    
-                    # Use the is_only_greeting function to determine if it's just a greeting
-                    if is_only_greeting(query_text):
-                        should_save = False
-                    
-                    structured_response = RAGResponse(
-                        answer=clean_response_text,
-                        sources=extracted_sources,
-                        memory_facts=extracted_memory,
-                        should_save=should_save
-                    )
+            # If it's a system-related query, add system context to the retrieved context
+            if is_system_query:
+                retrieved_context += f"\n\n--- SYSTEM INFORMATION ---\n{SYSTEM_CONTEXT}\nSOURCE: FCS Self-Model Document\n"
             
-            except Exception as e:
-                logger.warning(f"Error with JSON parsing approach: {str(e)}, falling back to simple response")
-                # Fall back to a simple response without structured parsing
-                response_text = self.llm.predict(
-                    prompt=qa_tmpl,
-                    query_str=query_text,
-                    multimodal_context=retrieved_context,
-                    chat_context=chat_context,
-                    memory_facts_context=memory_facts_context
-                )
-                
-                # Use the is_only_greeting function here
-                should_save = True
-                # Check for math questions
-                if any(char in query_text for char in ['+', '-', '*', '/', '=']) and any(c.isdigit() for c in query_text):
-                    should_save = False
-                # Check if it's just a greeting
-                if is_only_greeting(query_text):
-                    should_save = False
-                # Check for system enquiries
-                system_enquiry_phrases = ["what are you", "how do you work", "what is your name", "what can you do"]
-                if any(phrase in query_text.lower() for phrase in system_enquiry_phrases):
-                    should_save = False
-                # Check for memory-related queries
-                if is_memory_related_query(query_text):
-                    should_save = False
-                
-                structured_response = RAGResponse(
-                    answer=response_text,
-                    sources=None,
-                    memory_facts=None,
-                    should_save=should_save
-                )
+            # Use structured prediction to get the response
+            structured_response = self.llm.structured_predict(
+                RAGResponse,
+                qa_tmpl,
+                query_str=query_text,
+                multimodal_context=retrieved_context,
+                chat_context=chat_context,
+                memory_facts_context=memory_facts_context
+            )
             
             # Store the interaction in memory if user is provided and should_save is True
             if user and user.get('id') and structured_response.should_save:
