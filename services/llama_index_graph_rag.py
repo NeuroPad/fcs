@@ -304,8 +304,8 @@ class GraphRAGService:
         
         # Store the interaction in memory if user_id is provided
         if user and user.get('id'):
-            from services.graphiti_memory_service import GraphitiMemoryService, Message
-            memory_service = GraphitiMemoryService()
+            from fcs_core import FCSMemoryService, Message
+            memory_service = FCSMemoryService()
             
             # Add user query to memory
             user_message = Message(
@@ -315,7 +315,7 @@ class GraphRAGService:
                 source_description="user query",
                 name=f"user-query-{datetime.now().strftime('%Y%m%d%H%M%S')}"  # Add a unique name
             )
-            await memory_service.add_message(user_id, user_message)
+            await memory_service.add_message(user['id'], user_message)
             
             # Add AI response to memory with sources in the source description
             source_description = "ai assistant"
@@ -329,7 +329,7 @@ class GraphRAGService:
                 source_description=source_description,
                 name=f"ai-response-{datetime.now().strftime('%Y%m%d%H%M%S')}"  # Add a unique name
             )
-            await memory_service.add_message(user_id, ai_message)
+            await memory_service.add_message(user['id'], ai_message)
 
         # Create and return ExtendedGraphRAGResponse
         result = ExtendedGraphRAGResponse(

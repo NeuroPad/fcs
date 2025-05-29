@@ -11,7 +11,8 @@ from pathlib import Path
 
 
 from services.image_rag_service import ImageRAGService
-from services.graphiti_memory_service import GraphitiMemoryService, async_worker
+from fcs_core import FCSMemoryService
+from fcs_core.async_worker import async_worker
 from services.document_service import DocumentService
 from api import router as api_router
 
@@ -45,27 +46,27 @@ async def startup_event():
     # Initialize database
     init_db()
     
-    # Initialize GraphitiMemoryService worker
-    await GraphitiMemoryService.initialize_worker()
+    # Initialize FCSMemoryService worker
+    await FCSMemoryService.initialize_worker()
     
     # Initialize DocumentService worker
     await DocumentService.initialize_worker()
     
-    # Initialize a GraphitiMemoryService instance to build indices and constraints
-    memory_service = GraphitiMemoryService()
+    # Initialize a FCSMemoryService instance to build indices and constraints
+    memory_service = FCSMemoryService()
     await memory_service.initialize()
-    logger.info("Initialized GraphitiMemoryService on startup")
+    logger.info("Initialized FCSMemoryService on startup")
     logger.info("Initialized DocumentService worker on startup")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    # Shutdown GraphitiMemoryService worker
-    await GraphitiMemoryService.shutdown_worker()
+    # Shutdown FCSMemoryService worker
+    await FCSMemoryService.shutdown_worker()
     
     # Shutdown DocumentService worker
     await DocumentService.shutdown_worker()
     
-    logger.info("Shutdown GraphitiMemoryService and DocumentService workers")
+    logger.info("Shutdown FCSMemoryService and DocumentService workers")
 
 # Include the API router
 app.include_router(api_router, prefix="/api")

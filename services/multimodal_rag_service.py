@@ -281,8 +281,8 @@ class MultiModalRAGService:
             if user and user.get('id'):
                 logger.info(f"Attempting to store chat in memory for user_id: {user['id']}")
                 try:
-                    from services.graphiti_memory_service import GraphitiMemoryService, Message
-                    memory_service = GraphitiMemoryService()
+                    from fcs_core import FCSMemoryService, Message
+                    memory_service = FCSMemoryService()
                     
                     # Add user query to memory
                     user_message = Message(
@@ -306,7 +306,7 @@ class MultiModalRAGService:
                         source_description=source_description
                     )
                     logger.info(f"Adding assistant message to memory with source description: {source_description}")
-                    await memory_service.add_message(user_id, ai_message)
+                    await memory_service.add_message(user['id'], ai_message)
                     logger.info("Successfully stored chat in memory")
                 except Exception as e:
                     logger.error(f"Error storing chat in memory: {str(e)}")
@@ -370,32 +370,32 @@ class MultiModalRAGService:
             qa_tmpl = PromptTemplate(
                 "You are an adaptive AI designed to reason fluidly, weigh confidence continuously, and engage in context-aware interaction.\n"
                 "You serve as the expressive voice of a cognitive system grounded in structured beliefs and mutual learning—not as the source of knowledge or reasoning.\n"
-                "All core knowledge comes from the system’s belief graph. You do not invent beliefs, revise memory, or make decisions.\n\n"
+                "All core knowledge comes from the system's belief graph. You do not invent beliefs, revise memory, or make decisions.\n\n"
                 "You are allowed to directly answer factual or trivial questions that do not require belief arbitration.\n"
                 "These include simple, well-known facts or definitions such as:\n"
-                "- “What’s 2 + 2?”\n"
-                "- “Who invented the electric bulb?”\n"
-                "- “What year was Darwin born?”\n"
-                "- “What is the capital of France?”\n"
-                "- “How many continents are there?”\n"
-                "- “What is gravity?”\n"
-                "- “What is water made of?”\n"
-                "- “Define photosynthesis”\n"
-                "- “What is the square root of 25?”\n"
-                "- “What language is spoken in Brazil?”\n"
+                "- \"What's 2 + 2?\"\n"
+                "- \"Who invented the electric bulb?\"\n"
+                "- \"What year was Darwin born?\"\n"
+                "- \"What is the capital of France?\"\n"
+                "- \"How many continents are there?\"\n"
+                "- \"What is gravity?\"\n"
+                "- \"What is water made of?\"\n"
+                "- \"Define photosynthesis\"\n"
+                "- \"What is the square root of 25?\"\n"
+                "- \"What language is spoken in Brazil?\"\n"
                 "These answers do not need to rely on the belief graph.\n\n"
                 "You may also guide early onboarding and help users orient themselves when they ask open-ended questions like:\n"
-                "- “What are you?” → Respond with:\n"
-                "  > I’m FCS. I’m here to help you build your intelligence and grow with you.\n"
-                "- “What can you help with?” → Respond with:\n"
-                "  > I can help you explore ideas, reflect on beliefs, identify contradictions, and make sense of what you’re learning.\n"
-                "- “How do I get started?” → Respond with:\n"
-                "  > You can upload documents, write thoughts, or just ask questions. I’ll help you map it all out over time.\n\n"
+                "- \"What are you?\" → Respond with:\n"
+                "  > I'm FCS. I'm here to help you build your intelligence and grow with you.\n"
+                "- \"What can you help with?\" → Respond with:\n"
+                "  > I can help you explore ideas, reflect on beliefs, identify contradictions, and make sense of what you're learning.\n"
+                "- \"How do I get started?\" → Respond with:\n"
+                "  > You can upload documents, write thoughts, or just ask questions. I'll help you map it all out over time.\n\n"
                 "When generating all other responses:\n"
                 "- Avoid rigid conclusions; maintain useful ambiguity when appropriate\n"
                 "- Prioritize relevance, brevity, and clarity\n"
                 "- Think in gradients, not absolutes—uncertainty can be informative\n"
-                "- If there is insufficient information in the belief graph to answer, say so clearly (e.g. > *There’s not enough information yet to answer that confidently. Please add more knowledge on the subject.*)\n"
+                "- If there is insufficient information in the belief graph to answer, say so clearly (e.g. > *There's not enough information yet to answer that confidently. Please add more knowledge on the subject.*)\n"
                 "- If you include phrasing or clarifications not in the retrieved context, format them using blockquote markdown (`>`). This signals they are assistant-generated elaborations, not part of the belief graph.\n"
                 "- Do not generate or imply source citations, belief updates, or persistent memory unless explicitly present in the context\n"
                 "- You may rephrase contradictions, summaries, or confidence scores into conversational English\n"
@@ -412,9 +412,6 @@ class MultiModalRAGService:
                 "Query: {query_str}\n"
                 "Answer:"
             )
-
-
-
 
             # Call the LLM with the formatted prompt
             response_text = self.llm.predict(
@@ -446,32 +443,39 @@ class MultiModalRAGService:
             
             # Store the interaction in memory if user_id is provided
             if user and user.get('id'):
-                from services.graphiti_memory_service import GraphitiMemoryService, Message
-                memory_service = GraphitiMemoryService()
-                
-                # Add user query to memory
-                user_message = Message(
-                    content=query_text,
-                    role_type="user",
-                    role=user.get('name', ''),
-                    source_description="user query",
-                    name=f"user-query-{datetime.now().strftime('%Y%m%d%H%M%S')}" 
-                )
-                await memory_service.add_message(user['id'], user_message)
-                
-                # Add AI response to memory with sources in the source description
-                source_description = "ai assistant"
-                if sources:
-                    source_list = ", ".join(sources)
-                    source_description = f"ai assistant with sources: {source_list}"
-                
-                ai_message = Message(
-                    content=response_text,
-                    role_type="assistant",
-                    source_description=source_description,
-                    name=f"ai-response-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                )
-                await memory_service.add_message(user['id'], ai_message)
+                logger.info(f"Attempting to store chat in memory for user_id: {user['id']}")
+                try:
+                    from fcs_core import FCSMemoryService, Message
+                    memory_service = FCSMemoryService()
+                    
+                    # Add user query to memory
+                    user_message = Message(
+                        content=query_text,
+                        role_type="user",
+                        role=user.get('name', ''),
+                        source_description="user query",
+                        name=f"user-query-{datetime.now().strftime('%Y%m%d%H%M%S')}" 
+                    )
+                    await memory_service.add_message(user['id'], user_message)
+                    
+                    # Add AI response to memory with sources in the source description
+                    source_description = "ai assistant"
+                    if sources:
+                        source_list = ", ".join(sources)
+                        source_description = f"ai assistant with sources: {source_list}"
+                    
+                    ai_message = Message(
+                        content=response_text,
+                        role_type="assistant",
+                        source_description=source_description,
+                        name=f"ai-response-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    )
+                    await memory_service.add_message(user['id'], ai_message)
+
+                except Exception as e:
+                    logger.error(f"Error storing chat in memory: {str(e)}")
+            else:
+                logger.warning("No user_id provided, skipping memory storage")
 
             return ExtendedGraphRAGResponse(
                 answer=response_text,

@@ -32,7 +32,7 @@ from db.models import Document as DBDocument
 from db.session import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
-from services.graphiti_memory_service import GraphitiMemoryService, Message
+from fcs_core import FCSMemoryService, Message
 from schemas.memory import SearchQuery
 
 # System-related content for FCS queries
@@ -246,7 +246,7 @@ class RAGService:
             # Retrieve user memory facts
             memory_facts_context = ""
             try:
-                memory_service = GraphitiMemoryService()
+                memory_service = FCSMemoryService()
                 search_query = SearchQuery(query=query_text, max_facts=3)  # Adjust max_facts as needed
                 memory_search_results = await memory_service.search_memory(str(user_id), search_query)
                 
@@ -295,7 +295,7 @@ class RAGService:
                 "- Simple greetings: 'hello', 'hi', 'hey there'\n"
                 "- Basic math questions: '5+5', '2x+3=21', 'what is 10*10'\n"
                 "- System/meta questions about FCS itself: 'what are you', 'how do you work', 'what is your name', 'what can you do'\n"
-                "- Memory queries asking what you know about the user: 'what do you know about me', 'what's in my memory', 'tell me what you remember', 'what was my last question'\n"
+                "- Memory queries asking what you know about the user: 'what do you know about me', 'what's in my memory', 'tell me what you remember', 'what was my last question', 'what have i told you', 'what did i ask', 'what have i told you', 'what do you remember about me', 'tell me what you know about me', 'what information do you have on me', 'show me my memory', 'recall what i said', 'what was my previous', 'how much do you know about me', 'what are my previous', 'what's saved in memory', 'what is saved in memory', 'am i in your memory', 'do you remember', 'can you remember', 'what was our last conversation', 'what did we talk about', 'what have we discussed', 'what did i say about', 'what have i shared with you', 'what do you know about me', 'what's in my memory', 'what was my last question', 'what have i told you', 'what did i ask', 'what have i told you', 'what do you remember about me', 'tell me what you know about me', 'what information do you have on me', 'show me my memory', 'recall what i said', 'what was my previous', 'how much do you know about me', 'what are my previous', 'what's saved in memory', 'what is saved in memory', 'am i in your memory', 'do you remember', 'can you remember', 'what was our last conversation', 'what did we talk about', 'what have we discussed', 'what did i say about', 'what have i shared with you', 'what is my name', 'what do i believe about ...', 'what is my though about ...'\n"
                 "- Trivial factual questions: 'what is the capital of France', 'who invented the telephone'\n\n"
                 "Set 'should_save' to TRUE for substantive conversations, learning interactions, personal information sharing, complex discussions, and anything that would be valuable for building the user's cognitive profile.\n\n"
                 "These examples are NOT exhaustive - use your judgment to determine what constitutes a meaningful interaction worth preserving.\n\n"
@@ -320,13 +320,8 @@ class RAGService:
             )
             qa_tmpl = PromptTemplate(qa_tmpl_str)
 
-            # Check if this appears to be a system-related query for context injection
-            system_indicators = ["what are you", "who are you", "how do you work", "what is fcs", "what can you do", "tell me about yourself", "describe yourself", "what is your purpose", "explain fcs"]
-            is_system_query = any(indicator in query_text.lower() for indicator in system_indicators)
-            
-            # If it's a system-related query, add system context to the retrieved context
-            if is_system_query:
-                retrieved_context += f"\n\n--- SYSTEM INFORMATION ---\n{SYSTEM_CONTEXT}\nSOURCE: FCS Self-Model Document\n"
+            # Always include system context so LLM can handle any system-related queries
+            retrieved_context += f"\n\n--- SYSTEM INFORMATION ---\n{SYSTEM_CONTEXT}\nSOURCE: FCS Self-Model Document\n"
             
             # Use structured prediction to get the response
             structured_response = self.llm.structured_predict(
@@ -341,7 +336,7 @@ class RAGService:
             # Store the interaction in memory if user is provided and should_save is True
             if user and user.get('id') and structured_response.should_save:
                 try:
-                    memory_service = GraphitiMemoryService()
+                    memory_service = FCSMemoryService()
                     
                     # Add user query to memory
                     user_message = Message(

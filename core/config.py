@@ -1,34 +1,35 @@
-from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import os
 from pathlib import Path
 
 ROOT_DIR = Path().absolute()
-load_dotenv()
 
 # Define models directory relative to project root
 MODELS_DIR = Path(os.path.dirname(os.path.abspath(__file__))).parent / "models"
 
-class Settings:
-    NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
-    NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
-    ALGORITHM = os.getenv("ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))
+class Settings(BaseSettings):
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USERNAME: str = "neo4j"
+    NEO4J_PASSWORD: str = ""
+    OPENAI_API_KEY: str = ""
+    SECRET_KEY: str = "your-secret-key"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200
     
     # Pinecone settings for RAG
-    PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-    PINECONE_ENVIRONMENT = os.getenv("PINECONE_ENVIRONMENT", "gcp-starter")
+    PINECONE_API_KEY: str = ""
+    PINECONE_ENVIRONMENT: str = "gcp-starter"
     
     # Directory paths
-    UPLOAD_DIR = ROOT_DIR / "uploads"
-    CHAT_IMAGES_DIR = ROOT_DIR / "chat_images"
-    CHROMA_DB_DIR = ROOT_DIR / "chroma_db"
-    MODELS_DIR = MODELS_DIR  
+    UPLOAD_DIR: Path = ROOT_DIR / "uploads"
+    CHAT_IMAGES_DIR: Path = ROOT_DIR / "chat_images"
+    CHROMA_DB_DIR: Path = ROOT_DIR / "chroma_db"
+    MODELS_DIR: Path = MODELS_DIR  
     
     # For backward compatibility
-    PROCESSED_FILES_DIR = UPLOAD_DIR
+    PROCESSED_FILES_DIR: Path = ROOT_DIR / "uploads"
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()

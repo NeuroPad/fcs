@@ -3,7 +3,7 @@ from typing import List, Optional
 import uuid
 from datetime import datetime
 
-from services.graphiti_memory_service import GraphitiMemoryService, Message, CognitiveObject
+from fcs_core import FCSMemoryService, Message, CognitiveObject
 from schemas.memory import (
     MessageCreate,
     MessageResponse,
@@ -19,9 +19,9 @@ from schemas.memory import (
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
-# Dependency to get the GraphitiMemoryService
+# Dependency to get the FCSMemoryService
 async def get_memory_service():
-    service = GraphitiMemoryService()
+    service = FCSMemoryService()
     try:
         await service.initialize()
         yield service
@@ -30,7 +30,7 @@ async def get_memory_service():
 
 
 @router.post("/messages/{user_id}", response_model=OperationResponse, status_code=status.HTTP_201_CREATED)
-async def add_message(user_id: str, message: MessageCreate, service: GraphitiMemoryService = Depends(get_memory_service)):
+async def add_message(user_id: str, message: MessageCreate, service: FCSMemoryService = Depends(get_memory_service)):
     """Add a single message to the memory graph"""
     # Convert from API schema to service model
     msg = Message(
@@ -55,7 +55,7 @@ async def add_message(user_id: str, message: MessageCreate, service: GraphitiMem
 
 
 @router.post("/messages/batch/{user_id}", response_model=OperationResponse, status_code=status.HTTP_201_CREATED)
-async def add_messages(user_id: str, messages: List[MessageCreate], service: GraphitiMemoryService = Depends(get_memory_service)):
+async def add_messages(user_id: str, messages: List[MessageCreate], service: FCSMemoryService = Depends(get_memory_service)):
     """Add multiple messages to the memory graph"""
     # Convert from API schema to service model
     msgs = [
@@ -80,7 +80,7 @@ async def add_messages(user_id: str, messages: List[MessageCreate], service: Gra
 
 
 @router.post("/text/{user_id}", response_model=OperationResponse, status_code=status.HTTP_201_CREATED)
-async def add_text(user_id: str, document: TextDocumentCreate, service: GraphitiMemoryService = Depends(get_memory_service)):
+async def add_text(user_id: str, document: TextDocumentCreate, service: FCSMemoryService = Depends(get_memory_service)):
     """Add a text document to the memory graph"""
     result = await service.add_text(
         user_id=user_id,
@@ -101,7 +101,7 @@ async def add_text(user_id: str, document: TextDocumentCreate, service: Graphiti
 
 @router.post("/document/{user_id}", response_model=OperationResponse, status_code=status.HTTP_201_CREATED)
 async def add_document(user_id: str, file_path: str, source_name: Optional[str] = None, source_description: Optional[str] = None, 
-                     service: GraphitiMemoryService = Depends(get_memory_service)):
+                     service: FCSMemoryService = Depends(get_memory_service)):
     """Add a document from a file to the memory graph"""
     result = await service.add_document(
         user_id=user_id,
@@ -121,7 +121,7 @@ async def add_document(user_id: str, file_path: str, source_name: Optional[str] 
 
 
 @router.post("/search/{user_id}", response_model=SearchResults)
-async def search_memory(user_id: str, query: SearchQuery, service: GraphitiMemoryService = Depends(get_memory_service)):
+async def search_memory(user_id: str, query: SearchQuery, service: FCSMemoryService = Depends(get_memory_service)):
     """Search the memory graph for relevant information"""
     result = await service.search_memory(
         user_id=user_id,
@@ -142,7 +142,7 @@ async def search_memory(user_id: str, query: SearchQuery, service: GraphitiMemor
 
 @router.post("/cognitive-objects/{user_id}", response_model=OperationResponse, status_code=status.HTTP_201_CREATED)
 async def add_cognitive_object(user_id: str, cognitive_object: CognitiveObjectCreate, 
-                              service: GraphitiMemoryService = Depends(get_memory_service)):
+                              service: FCSMemoryService = Depends(get_memory_service)):
     """Add a cognitive object to the memory graph"""
     # Convert from API schema to service model
     co = CognitiveObject(
@@ -173,7 +173,7 @@ async def add_cognitive_object(user_id: str, cognitive_object: CognitiveObjectCr
 
 
 @router.get("/cognitive-objects/{user_id}/{object_id}", response_model=CognitiveObjectResponse)
-async def get_cognitive_object(user_id: str, object_id: str, service: GraphitiMemoryService = Depends(get_memory_service)):
+async def get_cognitive_object(user_id: str, object_id: str, service: FCSMemoryService = Depends(get_memory_service)):
     """Get a cognitive object from the memory graph"""
     result = await service.get_cognitive_object(user_id, object_id)
     
@@ -184,7 +184,7 @@ async def get_cognitive_object(user_id: str, object_id: str, service: GraphitiMe
 
 
 @router.delete("/user/{user_id}", response_model=OperationResponse)
-async def delete_user_memory(user_id: str, service: GraphitiMemoryService = Depends(get_memory_service)):
+async def delete_user_memory(user_id: str, service: FCSMemoryService = Depends(get_memory_service)):
     """Delete all memory for a specific user"""
     result = await service.delete_user_memory(user_id)
     
@@ -199,7 +199,7 @@ async def delete_user_memory(user_id: str, service: GraphitiMemoryService = Depe
 
 
 @router.post("/process-documents", response_model=OperationResponse)
-async def process_documents(service: GraphitiMemoryService = Depends(get_memory_service)):
+async def process_documents(service: FCSMemoryService = Depends(get_memory_service)):
     """Process all documents in the PROCESSED_FILES_DIR directory
     
     This endpoint reads all files from the PROCESSED_FILES_DIR using SimpleDirectoryReader,
@@ -224,7 +224,7 @@ async def process_documents(service: GraphitiMemoryService = Depends(get_memory_
 
 
 @router.post("/clear-neo4j", response_model=OperationResponse, status_code=status.HTTP_200_OK)
-async def clear_neo4j_data(service: GraphitiMemoryService = Depends(get_memory_service)):
+async def clear_neo4j_data(service: FCSMemoryService = Depends(get_memory_service)):
     """Clear all data in the Neo4j database"""
     result = await service.clear_neo4j_data()
     
@@ -241,7 +241,7 @@ async def clear_neo4j_data(service: GraphitiMemoryService = Depends(get_memory_s
 async def get_top_connections(
     user_id: str, 
     limit: int = 10, 
-    service: GraphitiMemoryService = Depends(get_memory_service)
+    service: FCSMemoryService = Depends(get_memory_service)
 ):
     """Get the most connected nodes and facts for a specific user
     

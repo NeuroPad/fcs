@@ -1,5 +1,5 @@
 """
-Copyright 2024, Zep Software, Inc.
+Copyright 2025, FCS Software, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,15 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from .fcs_memory_service import FCSMemoryService
-from .models import CognitiveObject, Message, ContradictionAlert, FCSResponse
-from .async_worker import AsyncWorker
+from .lib import prompt_library
 
-__all__ = [
-    'FCSMemoryService',
-    'CognitiveObject',
-    'Message',
-    'ContradictionAlert',
-    'FCSResponse',
-    'AsyncWorker',
-] 
+__all__ = ['prompt_library'] 
