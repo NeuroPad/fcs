@@ -1,5 +1,5 @@
 """
-Copyright 2025, FCS Software, Inc
+Copyright 2024, Zep Software, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -265,6 +265,14 @@ class ExtendedGraphiti(Graphiti):
 
             entity_edges = resolved_edges + invalidated_edges
 
+            # Create contradiction edges from edge invalidation if enabled
+            invalidation_contradiction_edges = []
+            if self.enable_contradiction_detection and invalidated_edges:
+                invalidation_contradiction_edges = await self._create_contradiction_edges_from_invalidation(
+                    resolved_edges, invalidated_edges, episode, hydrated_nodes
+                )
+                entity_edges.extend(invalidation_contradiction_edges)
+
             # Detect contradictions if enabled
             contradiction_result = ContradictionDetectionResult(
                 contradictions_found=False,
@@ -284,6 +292,15 @@ class ExtendedGraphiti(Graphiti):
                         edge for edges in contradiction_edges_list for edge in edges
                     ]
                     
+                    # Add contradiction edges to entity edges
+                    entity_edges.extend(all_contradiction_edges)
+                else:
+                    all_contradiction_edges = []
+                
+                # Combine all contradiction edges (from node detection and edge invalidation)
+                all_contradiction_edges.extend(invalidation_contradiction_edges)
+                
+                if all_contradiction_edges:
                     # Get unique contradicted and contradicting nodes
                     contradicted_node_uuids = set()
                     contradicting_node_uuids = set()
@@ -312,9 +329,6 @@ class ExtendedGraphiti(Graphiti):
                             contradicting_nodes, contradicted_nodes
                         ),
                     )
-                    
-                    # Add contradiction edges to entity edges
-                    entity_edges.extend(all_contradiction_edges)
 
             # Build episodic edges
             episodic_edges = build_episodic_edges(hydrated_nodes, episode, now)
@@ -396,6 +410,154 @@ class ExtendedGraphiti(Graphiti):
 
         return contradiction_results
 
+    async def _create_contradiction_edges_from_invalidation(
+        self,
+        resolved_edges: list[EntityEdge],
+        invalidated_edges: list[EntityEdge],
+        episode: EpisodicNode,
+        entities: list[EntityNode],
+    ) -> list[EntityEdge]:
+        """
+        Create CONTRADICTS edges between nodes when edge invalidation occurs.
+        
+        When a new edge invalidates an old edge, this function creates a CONTRADICTS
+        relationship between the nodes involved in the new edge and the nodes involved
+        in the invalidated edge.
+        
+        Parameters
+        ----------
+        resolved_edges : list[EntityEdge]
+            The new edges that caused invalidation
+        invalidated_edges : list[EntityEdge]
+            The edges that were invalidated
+        episode : EpisodicNode
+            The current episode
+        entities : list[EntityNode]
+            All entities in the current processing batch
+            
+        Returns
+        -------
+        list[EntityEdge]
+            List of CONTRADICTS edges created
+        """
+        if not invalidated_edges:
+            return []
+        
+        contradiction_edges = []
+        now = utc_now()
+        
+        # Create a mapping from node UUID to node for quick lookup
+        entity_map = {entity.uuid: entity for entity in entities}
+        
+        for invalidated_edge in invalidated_edges:
+            # Find which resolved edge caused this invalidation
+            # This is determined by the invalid_at timestamp matching the valid_at of the new edge
+            causing_edge = None
+            for resolved_edge in resolved_edges:
+                if (invalidated_edge.invalid_at and resolved_edge.valid_at and 
+                    invalidated_edge.invalid_at == resolved_edge.valid_at):
+                    causing_edge = resolved_edge
+                    break
+            
+            if not causing_edge:
+                continue
+                
+            # Get the nodes involved in both edges
+            new_source_node = entity_map.get(causing_edge.source_node_uuid)
+            new_target_node = entity_map.get(causing_edge.target_node_uuid)
+            old_source_node = entity_map.get(invalidated_edge.source_node_uuid)
+            old_target_node = entity_map.get(invalidated_edge.target_node_uuid)
+            
+            if not all([new_source_node, new_target_node, old_source_node, old_target_node]):
+                continue
+                
+            # Create contradiction edges between the nodes
+            # We create edges from new nodes to old nodes to indicate what contradicts what
+            
+            # Create CONTRADICTS edge from new source to old source (if different)
+            if new_source_node.uuid != old_source_node.uuid:
+                contradiction_edge = EntityEdge(
+                    source_node_uuid=new_source_node.uuid,
+                    target_node_uuid=old_source_node.uuid,
+                    name="CONTRADICTS",
+                    fact=f"The new information about {new_source_node.name} contradicts previous information about {old_source_node.name}",
+                    episodes=[episode.uuid],
+                    created_at=now,
+                    valid_at=episode.valid_at,
+                    group_id=episode.group_id,
+                    attributes={
+                        "new_fact": causing_edge.fact,
+                        "contradicted_fact": invalidated_edge.fact,
+                        "invalidation_reason": "edge_invalidation"
+                    }
+                )
+                contradiction_edges.append(contradiction_edge)
+                
+            # Create CONTRADICTS edge from new target to old target (if different)
+            if new_target_node.uuid != old_target_node.uuid:
+                contradiction_edge = EntityEdge(
+                    source_node_uuid=new_target_node.uuid,
+                    target_node_uuid=old_target_node.uuid,
+                    name="CONTRADICTS",
+                    fact=f"The new information about {new_target_node.name} contradicts previous information about {old_target_node.name}",
+                    episodes=[episode.uuid],
+                    created_at=now,
+                    valid_at=episode.valid_at,
+                    group_id=episode.group_id,
+                    attributes={
+                        "new_fact": causing_edge.fact,
+                        "contradicted_fact": invalidated_edge.fact,
+                        "invalidation_reason": "edge_invalidation"
+                    }
+                )
+                contradiction_edges.append(contradiction_edge)
+                
+            # Also create cross-contradictions if the edges involve different entity pairs
+            # New source contradicts old target
+            if (new_source_node.uuid != old_target_node.uuid and 
+                new_source_node.uuid != old_source_node.uuid):
+                contradiction_edge = EntityEdge(
+                    source_node_uuid=new_source_node.uuid,
+                    target_node_uuid=old_target_node.uuid,
+                    name="CONTRADICTS",
+                    fact=f"The new information about {new_source_node.name} contradicts previous information about {old_target_node.name}",
+                    episodes=[episode.uuid],
+                    created_at=now,
+                    valid_at=episode.valid_at,
+                    group_id=episode.group_id,
+                    attributes={
+                        "new_fact": causing_edge.fact,
+                        "contradicted_fact": invalidated_edge.fact,
+                        "invalidation_reason": "edge_invalidation"
+                    }
+                )
+                contradiction_edges.append(contradiction_edge)
+                
+            # New target contradicts old source
+            if (new_target_node.uuid != old_source_node.uuid and 
+                new_target_node.uuid != old_target_node.uuid):
+                contradiction_edge = EntityEdge(
+                    source_node_uuid=new_target_node.uuid,
+                    target_node_uuid=old_source_node.uuid,
+                    name="CONTRADICTS",
+                    fact=f"The new information about {new_target_node.name} contradicts previous information about {old_source_node.name}",
+                    episodes=[episode.uuid],
+                    created_at=now,
+                    valid_at=episode.valid_at,
+                    group_id=episode.group_id,
+                    attributes={
+                        "new_fact": causing_edge.fact,
+                        "contradicted_fact": invalidated_edge.fact,
+                        "invalidation_reason": "edge_invalidation"
+                    }
+                )
+                contradiction_edges.append(contradiction_edge)
+        
+        if contradiction_edges:
+            logger.info(f"Created {len(contradiction_edges)} CONTRADICTS edges from edge invalidation")
+        
+        return contradiction_edges
+
     def _generate_contradiction_message(
         self,
         contradicting_nodes: list[EntityNode],
@@ -419,26 +581,64 @@ class ExtendedGraphiti(Graphiti):
         if not contradicting_nodes or not contradicted_nodes:
             return ""
         
+        # Helper function to get meaningful description from node
+        def get_node_description(node: EntityNode) -> str:
+            # Use summary if available and meaningful
+            if node.summary and len(node.summary.strip()) > 10:
+                return node.summary.strip()
+            # Otherwise use name
+            return node.name
+        
+        # Helper function to detect preference/opinion contradictions
+        def is_preference_contradiction(contradicting_desc: str, contradicted_desc: str) -> bool:
+            preference_indicators = [
+                'love', 'like', 'prefer', 'favorite', 'hate', 'dislike', 
+                'enjoy', 'can\'t stand', 'adore', 'despise'
+            ]
+            return any(indicator in contradicting_desc.lower() or indicator in contradicted_desc.lower() 
+                      for indicator in preference_indicators)
+        
         if len(contradicting_nodes) == 1 and len(contradicted_nodes) == 1:
-            return (
-                f"You said {contradicted_nodes[0].name} before. "
-                f"This feels different with {contradicting_nodes[0].name}. "
-                f"Want to look at it?"
-            )
+            contradicting_desc = get_node_description(contradicting_nodes[0])
+            contradicted_desc = get_node_description(contradicted_nodes[0])
+            
+            # Check if this is a preference contradiction
+            if is_preference_contradiction(contradicting_desc, contradicted_desc):
+                return (
+                    f"I notice you mentioned different preferences. "
+                    f"Earlier you said: '{contradicted_desc}' "
+                    f"But now: '{contradicting_desc}' "
+                    f"Would you like to explore this change?"
+                )
+            else:
+                return (
+                    f"I found conflicting information. "
+                    f"Previously: '{contradicted_desc}' "
+                    f"Currently: '{contradicting_desc}' "
+                    f"Want to look at this?"
+                )
         elif len(contradicting_nodes) == 1:
-            contradicted_names = ", ".join([node.name for node in contradicted_nodes])
+            contradicting_desc = get_node_description(contradicting_nodes[0])
+            contradicted_descriptions = [get_node_description(node) for node in contradicted_nodes]
+            contradicted_text = "', '".join(contradicted_descriptions)
+            
             return (
-                f"You said {contradicted_names} before. "
-                f"This feels different with {contradicting_nodes[0].name}. "
-                f"Want to look at it?"
+                f"I found some conflicting information. "
+                f"You previously mentioned: '{contradicted_text}' "
+                f"But now: '{contradicting_desc}' "
+                f"Would you like to discuss this?"
             )
         else:
-            contradicting_names = ", ".join([node.name for node in contradicting_nodes])
-            contradicted_names = ", ".join([node.name for node in contradicted_nodes])
+            contradicting_descriptions = [get_node_description(node) for node in contradicting_nodes]
+            contradicted_descriptions = [get_node_description(node) for node in contradicted_nodes]
+            contradicting_text = "', '".join(contradicting_descriptions)
+            contradicted_text = "', '".join(contradicted_descriptions)
+            
             return (
-                f"You said {contradicted_names} before. "
-                f"This feels different with {contradicting_names}. "
-                f"Want to look at it?"
+                f"I found multiple conflicting pieces of information. "
+                f"Previously: '{contradicted_text}' "
+                f"Currently: '{contradicting_text}' "
+                f"Would you like to review these differences?"
             )
 
     async def _update_community_if_exists(self, node: EntityNode):

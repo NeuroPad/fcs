@@ -228,12 +228,12 @@ async def clear_neo4j_data(service: FCSMemoryService = Depends(get_memory_servic
     """Clear all data in the Neo4j database"""
     result = await service.clear_neo4j_data()
     
-    if result["status"] == "error":
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result["message"])
+    if result.status == "error":
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.message)
     
     return OperationResponse(
-        status=result["status"],
-        message=result["message"]
+        status=result.status,
+        message=result.message
     )
 
 

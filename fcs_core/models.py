@@ -17,6 +17,7 @@ limitations under the License.
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
+from graphiti_core.utils.datetime_utils import utc_now
 
 
 class CognitiveObject(BaseModel):
@@ -43,7 +44,7 @@ class Message(BaseModel):
     name: str = Field(default="", description="The name of the episodic node for the message (optional)")
     role_type: str = Field(..., description="The role type of the message (user, assistant or system)")
     role: Optional[str] = Field(None, description="The custom role of the message")
-    timestamp: datetime = Field(default_factory=datetime.now, description="The timestamp of the message")
+    timestamp: datetime = Field(default_factory=utc_now, description="The timestamp of the message")
     source_description: str = Field(default="", description="The description of the source of the message")
 
 
@@ -54,7 +55,7 @@ class ContradictionAlert(BaseModel):
     contradicting_nodes: List[str] = Field(..., description="UUIDs of nodes that are contradicting")
     contradicted_nodes: List[str] = Field(..., description="UUIDs of nodes that are being contradicted")
     contradiction_edges: List[str] = Field(..., description="UUIDs of CONTRADICTS edges created")
-    timestamp: datetime = Field(default_factory=datetime.now, description="When the contradiction was detected")
+    timestamp: datetime = Field(default_factory=utc_now, description="When the contradiction was detected")
     severity: str = Field(default="medium", description="Severity level: low, medium, high")
     status: str = Field(default="pending", description="Status: pending, acknowledged, resolved, ignored")
     user_response: Optional[str] = Field(None, description="User's response to the contradiction")

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 from functools import partial
 from neo4j import GraphDatabase
+from graphiti_core.utils.datetime_utils import utc_now
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
@@ -156,7 +157,7 @@ class FCSMemoryService:
             contradicting_nodes=[node.uuid for node in contradiction_result.contradicting_nodes],
             contradicted_nodes=[node.uuid for node in contradiction_result.contradicted_nodes],
             contradiction_edges=[edge.uuid for edge in contradiction_result.contradiction_edges],
-            timestamp=datetime.now(),
+            timestamp=utc_now(),
             severity=self._determine_contradiction_severity(contradiction_result),
             status="pending"
         )
@@ -302,7 +303,7 @@ class FCSMemoryService:
                 group_id=user_id,
                 name=chunk_name,
                 episode_body=chunk,
-                reference_time=datetime.now(),
+                reference_time=utc_now(),
                 source=EpisodeType.text,
                 source_description=chunk_desc,
                 entity_types=self.entity_types
@@ -614,7 +615,7 @@ class FCSMemoryService:
                                 result = await self.graphiti.add_episode_with_contradictions(
                                     name=f"JSON-{Path(file_name).stem}",
                                     episode_body=json.dumps(json_content),
-                                    reference_time=datetime.now(),
+                                    reference_time=utc_now(),
                                     source=EpisodeType.json,
                                     source_description=f"JSON file: {file_name}",
                                     entity_types=self.entity_types
@@ -641,7 +642,7 @@ class FCSMemoryService:
                                 result = await self.graphiti.add_episode_with_contradictions(
                                     name=chunk_name,
                                     episode_body=chunk_content,
-                                    reference_time=datetime.now(),
+                                    reference_time=utc_now(),
                                     source=source_type,
                                     source_description=f"File: {file_name}, Chunk {i+1}/{chunks_len}",
                                     entity_types=self.entity_types
@@ -698,6 +699,7 @@ class FCSMemoryService:
                 status="error",
                 message=f"Failed to clear graph data: {str(e)}"
             )
+
 
     async def get_top_connections(self, user_id: str, limit: int = 10) -> Dict[str, Any]:
         """Get the most connected nodes and facts for a specific user."""

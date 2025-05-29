@@ -264,6 +264,10 @@ class RAGService:
                 "You serve as the expressive voice of a cognitive system grounded in structured beliefs and mutual learning—not as the source of knowledge or reasoning.\n"
                 "All core knowledge comes from the system's belief graph. You do not invent beliefs, revise memory, or make decisions.\n\n"
                 "DONOT use any other source of knowledge apart from the ones provided in the context.\n\n"
+                "---------------------\n"
+                "SYSTEM INFORMATION (Use this for system-related questions about FCS itself):\n"
+                f"{SYSTEM_CONTEXT}\n"
+                "---------------------\n\n"
                 "When users greet with casual expressions like 'hello', 'hi', or 'hey', respond warmly with:\n"
                 "  > Hello! I'm your cognitive companion, ready to grow and learn with you. Feel free to ask questions, share thoughts, or explore our journey together.\n\n"
                 "For general assistance queries like 'can you help me' or 'I need help', respond with:\n"
@@ -294,7 +298,7 @@ class RAGService:
                 "Set 'should_save' to FALSE for queries that should NOT be saved to memory. Examples include (but are not limited to):\n"
                 "- Simple greetings: 'hello', 'hi', 'hey there'\n"
                 "- Basic math questions: '5+5', '2x+3=21', 'what is 10*10'\n"
-                "- System/meta questions about FCS itself: 'what are you', 'how do you work', 'what is your name', 'what can you do'\n"
+                "- System/meta questions about FCS itself: 'what are you', 'how do you work', 'what is your name', 'what can you do','what is your name', 'how can you help me', 'what is your name'\n"
                 "- Memory queries asking what you know about the user: 'what do you know about me', 'what's in my memory', 'tell me what you remember', 'what was my last question', 'what have i told you', 'what did i ask', 'what have i told you', 'what do you remember about me', 'tell me what you know about me', 'what information do you have on me', 'show me my memory', 'recall what i said', 'what was my previous', 'how much do you know about me', 'what are my previous', 'what's saved in memory', 'what is saved in memory', 'am i in your memory', 'do you remember', 'can you remember', 'what was our last conversation', 'what did we talk about', 'what have we discussed', 'what did i say about', 'what have i shared with you', 'what do you know about me', 'what's in my memory', 'what was my last question', 'what have i told you', 'what did i ask', 'what have i told you', 'what do you remember about me', 'tell me what you know about me', 'what information do you have on me', 'show me my memory', 'recall what i said', 'what was my previous', 'how much do you know about me', 'what are my previous', 'what's saved in memory', 'what is saved in memory', 'am i in your memory', 'do you remember', 'can you remember', 'what was our last conversation', 'what did we talk about', 'what have we discussed', 'what did i say about', 'what have i shared with you', 'what is my name', 'what do i believe about ...', 'what is my though about ...'\n"
                 "- Trivial factual questions: 'what is the capital of France', 'who invented the telephone'\n\n"
                 "Set 'should_save' to TRUE for substantive conversations, learning interactions, personal information sharing, complex discussions, and anything that would be valuable for building the user's cognitive profile.\n\n"
@@ -319,9 +323,6 @@ class RAGService:
                 "- Set 'should_save' based on whether this interaction should be saved to memory using the guidelines above"
             )
             qa_tmpl = PromptTemplate(qa_tmpl_str)
-
-            # Always include system context so LLM can handle any system-related queries
-            retrieved_context += f"\n\n--- SYSTEM INFORMATION ---\n{SYSTEM_CONTEXT}\nSOURCE: FCS Self-Model Document\n"
             
             # Use structured prediction to get the response
             structured_response = self.llm.structured_predict(
