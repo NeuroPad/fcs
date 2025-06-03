@@ -1,5 +1,5 @@
 """
-Copyright 2024, Zep Software, Inc.
+Copyright 2025, FCS Software, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -53,6 +53,7 @@ from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entit
 
 from .node_operations import detect_and_create_node_contradictions
 from .search import contradiction_aware_search, enhanced_contradiction_search
+from .default_values_handler import apply_default_values_to_new_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +245,12 @@ class ExtendedGraphiti(Graphiti):
                 ),
             )
 
+            # Apply default values to new nodes (only for new nodes, not existing duplicates)
+            if entity_types:
+                nodes = apply_default_values_to_new_nodes(
+                    extracted_nodes, nodes, uuid_map, entity_types
+                )
+
             # Resolve edge pointers
             from graphiti_core.utils.bulk_utils import resolve_edge_pointers
             edges = resolve_edge_pointers(extracted_edges, uuid_map)
@@ -267,11 +274,11 @@ class ExtendedGraphiti(Graphiti):
 
             # Create contradiction edges from edge invalidation if enabled
             invalidation_contradiction_edges = []
-            if self.enable_contradiction_detection and invalidated_edges:
-                invalidation_contradiction_edges = await self._create_contradiction_edges_from_invalidation(
-                    resolved_edges, invalidated_edges, episode, hydrated_nodes
-                )
-                entity_edges.extend(invalidation_contradiction_edges)
+            # if self.enable_contradiction_detection and invalidated_edges:
+            #     invalidation_contradiction_edges = await self._create_contradiction_edges_from_invalidation(
+            #         resolved_edges, invalidated_edges, episode, hydrated_nodes
+            #     )
+            #     entity_edges.extend(invalidation_contradiction_edges)
 
             # Detect contradictions if enabled
             contradiction_result = ContradictionDetectionResult(

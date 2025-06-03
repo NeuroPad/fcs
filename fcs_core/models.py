@@ -1,5 +1,5 @@
 """
-Copyright 2024, Zep Software, Inc.
+Copyright 2025, FCS Software, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,8 +25,8 @@ class CognitiveObject(BaseModel):
     id: str = Field(..., description="Unique identifier (UUID)")
     content: str = Field(..., description="Natural language text expressed or inferred")
     type: str = Field(..., description="Enum: idea, contradiction, reference, system_note")
-    confidence: float = Field(..., description="Float [0.0 – 1.0] — how sure the system is this idea is currently valid")
-    salience: float = Field(..., description="Float — how central or reinforced this idea is within the session")
+    confidence: float = Field(default=0.7, description="Float [0.0 – 1.0] — how sure the system is this idea is currently valid")
+    salience: float = Field(default=0.5, description="Float — how central or reinforced this idea is within the session")
     source: str = Field(..., description="One of user, external, or system")
     flags: List[str] = Field(default_factory=list, description="Optional list, e.g. tracked, contradiction, external, unverified, dismissed")
     parent_ids: List[str] = Field(default_factory=list, description="List of UUIDs — COs this idea directly builds on")

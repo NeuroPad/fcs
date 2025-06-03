@@ -1,5 +1,5 @@
 """
-Copyright 2024, Zep Software, Inc.
+Copyright 2025, FCS Software, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -48,6 +48,7 @@ class AsyncWorker:
         while self._running:
             try:
                 logger.debug(f'Waiting for job (queue size: {self.queue.qsize()})')
+                print(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
                 job = await self.queue.get()
                 
                 if job is None:  # Shutdown signal

@@ -1,5 +1,5 @@
 """
-Copyright 2024, Zep Software, Inc.
+Copyright 2025, FCS Software, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,14 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from .extended_graphiti import ExtendedGraphiti
-from .node_operations import get_node_contradictions
-from .search import contradiction_aware_search
-from .prompts import prompt_library as extended_prompt_library
+from .extended_graphiti import (
+    ExtendedGraphiti,
+    ContradictionDetectionResult,
+    ExtendedAddEpisodeResults,
+)
+from .search import (
+    contradiction_aware_search,
+    enhanced_contradiction_search,
+)
+from .node_operations import detect_and_create_node_contradictions
+from .default_values_handler import apply_default_values_to_new_nodes
 
 __all__ = [
     'ExtendedGraphiti',
-    'get_node_contradictions',
+    'ContradictionDetectionResult',
+    'ExtendedAddEpisodeResults',
     'contradiction_aware_search',
-    'extended_prompt_library',
+    'enhanced_contradiction_search',
+    'detect_and_create_node_contradictions',
+    'apply_default_values_to_new_nodes',
 ] 
