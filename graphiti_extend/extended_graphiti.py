@@ -18,6 +18,7 @@ import logging
 from datetime import datetime
 from time import time
 from typing import Any
+import json
 
 from pydantic import BaseModel
 
@@ -53,7 +54,8 @@ from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entit
 
 from .node_operations import detect_and_create_node_contradictions
 from .search import contradiction_aware_search, enhanced_contradiction_search
-from .default_values_handler import apply_default_values_to_new_nodes
+from .default_values_handler import apply_default_values_to_new_nodes, sanitize_node_attributes
+from .salience_manager import SalienceManager
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +135,9 @@ class ExtendedGraphiti(Graphiti):
         
         self.enable_contradiction_detection = enable_contradiction_detection
         self.contradiction_threshold = contradiction_threshold
+        
+        # Initialize salience manager
+        self.salience_manager = SalienceManager(self.driver)
 
     async def add_episode_with_contradictions(
         self,
@@ -251,6 +256,19 @@ class ExtendedGraphiti(Graphiti):
                     extracted_nodes, nodes, uuid_map, entity_types
                 )
 
+            # Apply salience updates for duplicate detection
+            duplicate_nodes = []
+            duplicate_node_uuids = set()
+            for extracted, resolved in zip(extracted_nodes, nodes):
+                if extracted.uuid != resolved.uuid:  # Was a duplicate
+                    duplicate_nodes.append(resolved)
+                    duplicate_node_uuids.add(resolved.uuid)
+            
+            if duplicate_nodes:
+                await self.salience_manager.update_direct_salience(
+                    duplicate_nodes, 'duplicate_found', reference_time
+                )
+
             # Resolve edge pointers
             from graphiti_core.utils.bulk_utils import resolve_edge_pointers
             edges = resolve_edge_pointers(extracted_edges, uuid_map)
@@ -269,6 +287,15 @@ class ExtendedGraphiti(Graphiti):
                     self.clients, nodes, episode, previous_episodes, entity_types
                 ),
             )
+
+            # Apply network reinforcement for duplicate nodes only
+            if duplicate_nodes:
+                await self.salience_manager.propagate_network_reinforcement(
+                    duplicate_nodes, [group_id] if group_id else None
+                )
+            
+            # Apply structural boosts to all nodes
+            hydrated_nodes = await self.salience_manager.apply_structural_boosts(hydrated_nodes)
 
             entity_edges = resolved_edges + invalidated_edges
 
@@ -289,6 +316,16 @@ class ExtendedGraphiti(Graphiti):
             )
 
             if self.enable_contradiction_detection and hydrated_nodes:
+                # Apply salience for reasoning usage (only to nodes that haven't already been updated)
+                nodes_for_reasoning = [
+                    node for node in hydrated_nodes 
+                    if node.uuid not in duplicate_node_uuids
+                ]
+                if nodes_for_reasoning:
+                    await self.salience_manager.update_direct_salience(
+                        nodes_for_reasoning, 'reasoning_usage', reference_time
+                    )
+                
                 contradiction_edges_list = await self._detect_contradictions_for_nodes(
                     hydrated_nodes, episode, previous_episodes
                 )
@@ -301,6 +338,28 @@ class ExtendedGraphiti(Graphiti):
                     
                     # Add contradiction edges to entity edges
                     entity_edges.extend(all_contradiction_edges)
+                    
+                    # Apply salience for contradiction involvement
+                    contradicting_node_uuids = set()
+                    contradicted_node_uuids = set()
+                    
+                    for edge in all_contradiction_edges:
+                        contradicting_node_uuids.add(edge.source_node_uuid)
+                        contradicted_node_uuids.add(edge.target_node_uuid)
+                    
+                    # Find the actual node objects and apply salience updates
+                    # (only to nodes that haven't already received duplicate_found updates)
+                    node_uuid_map = {node.uuid: node for node in hydrated_nodes}
+                    contradiction_nodes = []
+                    
+                    for uuid in contradicting_node_uuids.union(contradicted_node_uuids):
+                        if uuid in node_uuid_map and uuid not in duplicate_node_uuids:
+                            contradiction_nodes.append(node_uuid_map[uuid])
+                    
+                    if contradiction_nodes:
+                        await self.salience_manager.update_direct_salience(
+                            contradiction_nodes, 'contradiction_involvement', reference_time
+                        )
                 else:
                     all_contradiction_edges = []
                 
@@ -308,22 +367,22 @@ class ExtendedGraphiti(Graphiti):
                 all_contradiction_edges.extend(invalidation_contradiction_edges)
                 
                 if all_contradiction_edges:
-                    # Get unique contradicted and contradicting nodes
-                    contradicted_node_uuids = set()
-                    contradicting_node_uuids = set()
+                    # Get unique contradicted and contradicting nodes for final result
+                    final_contradicted_node_uuids = set()
+                    final_contradicting_node_uuids = set()
                     
                     for edge in all_contradiction_edges:
-                        contradicting_node_uuids.add(edge.source_node_uuid)
-                        contradicted_node_uuids.add(edge.target_node_uuid)
+                        final_contradicting_node_uuids.add(edge.source_node_uuid)
+                        final_contradicted_node_uuids.add(edge.target_node_uuid)
                     
                     # Find the actual node objects
                     node_uuid_map = {node.uuid: node for node in hydrated_nodes}
                     contradicted_nodes = [
-                        node_uuid_map[uuid] for uuid in contradicted_node_uuids 
+                        node_uuid_map[uuid] for uuid in final_contradicted_node_uuids 
                         if uuid in node_uuid_map
                     ]
                     contradicting_nodes = [
-                        node_uuid_map[uuid] for uuid in contradicting_node_uuids 
+                        node_uuid_map[uuid] for uuid in final_contradicting_node_uuids 
                         if uuid in node_uuid_map
                     ]
                     
@@ -401,19 +460,33 @@ class ExtendedGraphiti(Graphiti):
             self.driver, nodes, SearchFilters(), min_score=self.contradiction_threshold
         )
 
-        # Detect contradictions for each node
-        contradiction_results = await semaphore_gather(
-            *[
-                detect_and_create_node_contradictions(
+        # Filter out the new nodes themselves from existing node lists to prevent self-contradiction
+        new_node_uuids = {node.uuid for node in nodes}
+        filtered_existing_nodes_lists = []
+        
+        for existing_nodes in existing_nodes_lists:
+            # Remove any nodes that are in the current batch of new nodes
+            filtered_existing = [
+                node for node in existing_nodes 
+                if node.uuid not in new_node_uuids
+            ]
+            filtered_existing_nodes_lists.append(filtered_existing)
+
+        # Only detect contradictions for nodes that have existing nodes to compare against
+        contradiction_results = []
+        for node, existing_nodes in zip(nodes, filtered_existing_nodes_lists, strict=True):
+            if existing_nodes:  # Only check for contradictions if there are existing nodes
+                result = await detect_and_create_node_contradictions(
                     self.llm_client,
                     node,
                     existing_nodes,
                     episode,
                     previous_episodes,
                 )
-                for node, existing_nodes in zip(nodes, existing_nodes_lists, strict=True)
-            ]
-        )
+                contradiction_results.append(result)
+            else:
+                # No existing nodes to contradict, return empty list
+                contradiction_results.append([])
 
         return contradiction_results
 

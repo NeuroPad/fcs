@@ -16,11 +16,100 @@ limitations under the License.
 
 import logging
 from typing import Any, Dict
+from datetime import datetime
 
 from pydantic import BaseModel
 from graphiti_core.nodes import EntityNode
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_datetime_to_iso(dt: Any) -> str:
+    """
+    Safely convert any datetime-like object to ISO format string.
+    
+    Handles both Python datetime objects and Neo4j DateTime objects.
+    """
+    if dt is None:
+        return None
+    
+    # If it's already a string, return it
+    if isinstance(dt, str):
+        return dt
+    
+    # If it has to_native method (Neo4j DateTime), convert it
+    if hasattr(dt, 'to_native'):
+        return dt.to_native().isoformat()
+    
+    # If it's a Python datetime, use isoformat
+    if hasattr(dt, 'isoformat'):
+        return dt.isoformat()
+    
+    # Return as-is if not a datetime
+    return dt
+
+
+def _sanitize_value(value: Any) -> Any:
+    """
+    Recursively sanitize a value to ensure it's JSON serializable.
+    
+    Converts datetime objects to ISO strings and handles nested structures.
+    """
+    if value is None:
+        return None
+    
+    # Handle datetime objects
+    if isinstance(value, datetime) or hasattr(value, 'to_native') or hasattr(value, 'isoformat'):
+        return _safe_datetime_to_iso(value)
+    
+    # Handle lists
+    if isinstance(value, list):
+        return [_sanitize_value(item) for item in value]
+    
+    # Handle dictionaries
+    if isinstance(value, dict):
+        return {key: _sanitize_value(val) for key, val in value.items()}
+    
+    # Return as-is for other types
+    return value
+
+
+def sanitize_node_attributes(nodes: list[EntityNode]) -> list[EntityNode]:
+    """
+    Sanitize node attributes to ensure they are JSON serializable.
+    
+    This function converts any datetime objects in node attributes to ISO format strings
+    to prevent JSON serialization errors during deduplication.
+    
+    Parameters
+    ----------
+    nodes : list[EntityNode]
+        Nodes to sanitize
+        
+    Returns
+    -------
+    list[EntityNode]
+        Nodes with sanitized attributes
+    """
+    for node in nodes:
+        # Sanitize attributes
+        if node.attributes:
+            node.attributes = _sanitize_value(node.attributes)
+        
+        # Sanitize other node properties that might contain datetime objects
+        if hasattr(node, 'created_at') and node.created_at:
+            node.created_at = _safe_datetime_to_iso(node.created_at)
+        
+        if hasattr(node, 'updated_at') and node.updated_at:
+            node.updated_at = _safe_datetime_to_iso(node.updated_at)
+        
+        if hasattr(node, 'valid_at') and node.valid_at:
+            node.valid_at = _safe_datetime_to_iso(node.valid_at)
+        
+        if hasattr(node, 'invalid_at') and node.invalid_at:
+            node.invalid_at = _safe_datetime_to_iso(node.invalid_at)
+    
+    return nodes
 
 
 def apply_default_values_to_new_nodes(

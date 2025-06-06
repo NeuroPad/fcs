@@ -44,11 +44,6 @@ export default function Drawer() {
       icon: 'assets/svg/home.svg',
     },
     {
-      title: 'Document Management',
-      url: '/documents',
-      icon: documentOutline,
-    },
-    {
       title: 'Knowledge Base',
       url: '/knowledgebase',
       icon: libraryOutline,

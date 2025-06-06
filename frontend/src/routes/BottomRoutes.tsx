@@ -48,18 +48,9 @@ export default function BottomRoutes({ isAuthenticated }: BottomRoutesProps) {
         </IonTabButton>
 
         <IonTabButton 
-          tab='school-finder' 
-          href='/documents' 
-          selected={location.pathname === '/documents'}
-        >
-          <IonIcon icon={getTabIcon('/documents', document, documentOutline)} />
-          <IonLabel>Documents</IonLabel>
-        </IonTabButton>
-
-        <IonTabButton 
-          tab='knowledgebase' // Changed tab name for clarity
-          href='/knowledgebase' // Correct base path
-          selected={location.pathname.startsWith('/knowledgebase')} // Select if path starts with /knowledgebase
+          tab='knowledgebase'
+          href='/knowledgebase' 
+          selected={location.pathname.startsWith('/knowledgebase')}
         >
           <IonIcon icon={getTabIcon('/knowledgebase', library, libraryOutline)} />
           <IonLabel>Knowledge Base</IonLabel>

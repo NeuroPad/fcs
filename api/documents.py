@@ -66,6 +66,29 @@ async def get_documents(
         logger.error(f"Error getting documents: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/count")
+async def get_documents_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get document count for the current user"""
+    try:
+        documents = await document_service.get_user_documents(current_user.id, db)
+        total_count = len(documents)
+        processed_count = len([doc for doc in documents if doc.status == "completed"])
+        pending_count = len([doc for doc in documents if doc.status == "pending"])
+        indexed_count = len([doc for doc in documents if doc.is_indexed])
+        
+        return {
+            "total": total_count,
+            "processed": processed_count,
+            "pending": pending_count,
+            "indexed": indexed_count
+        }
+    except Exception as e:
+        logger.error(f"Error getting document count: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: int,
@@ -124,6 +147,57 @@ async def process_document(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error processing document {document_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/process-pending")
+async def process_pending_documents(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Process all pending documents for the current user"""
+    try:
+        # Get all user documents
+        documents = await document_service.get_user_documents(current_user.id, db)
+        
+        # Filter pending documents
+        pending_documents = [doc for doc in documents if doc.status == "pending" or (doc.status == "processing" and not doc.is_indexed)]
+        
+        if not pending_documents:
+            return JSONResponse(content={
+                "status": "success",
+                "message": "No pending documents to process"
+            })
+        
+        processed_count = 0
+        for document in pending_documents:
+            try:
+                # Queue the document for processing if it's a PDF
+                if document.content_type.endswith("/pdf"):
+                    await document_service.queue_pdf_processing(document.id)
+                    document.status = "processing"
+                else:
+                    # For non-PDF files, mark as completed
+                    document.status = "completed"
+                    document.is_indexed = True
+                
+                db.commit()
+                db.refresh(document)
+                processed_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing document {document.id}: {str(e)}")
+                continue
+        
+        return JSONResponse(content={
+            "status": "success",
+            "message": f"Started processing {processed_count} pending documents",
+            "processed_count": processed_count,
+            "total_pending": len(pending_documents)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error processing pending documents: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{document_id}")

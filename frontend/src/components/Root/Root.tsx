@@ -19,7 +19,6 @@ import Profile from '../../pages/Profile/Profile';
 import CareTips from '../../pages/CareTips/CareTips';
 import Browse from '../../pages/Browse/Browse';
 
-import DocumentManagement from '../../pages/DocumentManagement/DocumentManagement';
 import KnowledgeBaseManagement from '../../pages/KnowledgeBaseManagement/KnowledgeBaseManagement';
 import UserManagement from '../../pages/UserManagement/UserManagement';
 import UserActivityLogs from '../../pages/UserActivityLogs/UserActivityLogs';
@@ -61,9 +60,7 @@ export default function Root() {
           <Route path='/edit-profile' render={() => <EditProfile />} />
           <Route path='/change-password' render={() => <ChangePassword />} />
 
-
-          <Route path='/documents' render={() => <DocumentManagement />} />
-          <Route path='/knowledgebase' render={() => <KnowledgeBaseManagement />} /> // Allow nested routes like /knowledgebase/graph
+          <Route path='/knowledgebase' render={() => <KnowledgeBaseManagement />} />
           <Route path='/users' render={() => <UserManagement />} />
           <Route path='/chat' render={() => <Chat />} />
           

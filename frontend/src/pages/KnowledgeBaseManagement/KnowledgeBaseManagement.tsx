@@ -1,40 +1,82 @@
+import './KnowledgeBaseManagement.css';
 import {
   IonPage,
+  IonContent,
+  IonButton,
+  IonIcon,
+  IonModal,
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonButtons,
+  IonToast,
+  IonSpinner,
+  IonGrid,
+  IonRow,
+  IonCol,
   IonCard,
   IonCardHeader,
   IonCardTitle,
   IonCardContent,
-  IonButton,
-  IonIcon,
-  IonGrid,
-  IonRow,
-  IonCol,
-  // IonBadge, // Removed unused import
-  IonToast,
   IonRefresher,
   IonRefresherContent,
-  // IonText, // Removed unused import
   IonProgressBar,
   IonSegment,
   IonSegmentButton,
   IonLabel,
 } from '@ionic/react';
-import React, { useEffect, useState } from 'react';
-import {
+import React, { useEffect, useState, useRef } from 'react';
+import DataTable from 'react-data-table-component';
+import { 
+  trash, 
+  eye, 
+  cloudUpload, 
+  close, 
+  book, 
   refreshCircle,
   analyticsOutline,
   list,
-  // checkmarkCircle, // Removed unused import
   hourglassOutline,
-  // warningOutline, // Removed unused import
+  warningOutline,
+  nuclear
 } from 'ionicons/icons';
+import axios from 'axios';
 import Header from '../../components/Header/Header';
 import Container from '../../components/Container/Container';
-import './KnowledgeBaseManagement.css';
+import { useAppDispatch, useAppSelector } from '../../app/hooks';
+import {
+  fetchDocuments,
+  uploadDocument,
+  processDocument,
+  indexDocument,
+  deleteDocument,
+  processPendingDocuments
+} from '../../features/documentSlice';
 import { API_BASE_URL } from '../../api/config';
+import { get } from "../../services/storage";
+import { Document, DocumentState } from '../../types/document';
 import GraphView from './GraphView';
 import TableView from './TableView';
 
+// Import React FilePond
+import { FilePond, registerPlugin } from 'react-filepond';
+
+// Import FilePond styles
+import 'filepond/dist/filepond.min.css';
+
+// Import the Image EXIF Orientation and Image Preview plugins
+import FilePondPluginImageExifOrientation from "filepond-plugin-image-exif-orientation";
+import FilePondPluginImagePreview from "filepond-plugin-image-preview";
+import "filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css";
+import { api } from '../../config/axiosConfig';
+
+// Register the plugins
+registerPlugin(FilePondPluginImageExifOrientation, FilePondPluginImagePreview);
+
+// Create a wrapper component to fix TypeScript issues
+const FilePondComponent = FilePond as any;
+
+// Interfaces
 interface GraphStats {
   totalNodes: number;
   totalRelationships: number;
@@ -52,10 +94,60 @@ interface RelationshipData {
   lastUpdated: string;
 }
 
+interface ProcessingStatus {
+  status: string;
+  message: string;
+  progress: number;
+  processed_documents: number;
+  total_documents: number;
+}
+
+interface DocumentCount {
+  total: number;
+  processed: number;
+  pending: number;
+  indexed: number;
+}
+
+// Define utility functions inline since fileUtils module is missing
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+const getStatusClass = (status: string): string => {
+  switch (status.toLowerCase()) {
+    case 'processed':
+      return 'status-processed';
+    case 'pending':
+      return 'status-pending';
+    case 'failed':
+      return 'status-failed';
+    default:
+      return 'status-default';
+  }
+};
+
 const KnowledgeBaseManagement: React.FC = () => {
-  const [isReindexing, setIsReindexing] = useState(false);
+  const dispatch = useAppDispatch();
+  const { documents, isLoading, error } = useAppSelector((state) => state.documents);
+  
+  // Document Management States
+  const [showUploadModal, setShowUploadModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessingPending, setIsProcessingPending] = useState(false);
+  const [isMultimodalIndexing, setIsMultimodalIndexing] = useState(false);
+  const [files, setFiles] = useState<any[]>([]);
+  const pondRef = useRef<any>(null);
+  
+  // Knowledge Base States
+  const [isReindexing, setIsReindexing] = useState(false);
   const [graphStats, setGraphStats] = useState<GraphStats>({
     totalNodes: 0,
     totalRelationships: 0,
@@ -64,19 +156,7 @@ const KnowledgeBaseManagement: React.FC = () => {
     lastIndexed: '',
   });
   const [relationships, setRelationships] = useState<RelationshipData[]>([]);
-  // Add state for segment selection
-  const [selectedSegment, setSelectedSegment] = useState<string>('graph');
-
-  // Add these interfaces near the top with other interfaces
-  interface ProcessingStatus {
-    status: string;
-    message: string;
-    progress: number;
-    processed_documents: number;
-    total_documents: number;
-  }
-
-  // Add these state variables in the component
+  const [selectedSegment, setSelectedSegment] = useState<string>('documents');
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
     status: 'idle',
     message: '',
@@ -85,18 +165,105 @@ const KnowledgeBaseManagement: React.FC = () => {
     total_documents: 0,
   });
   const [ws, setWs] = useState<WebSocket | null>(null);
+  
+  // Clear Memory States
+  const [isClearingMemory, setIsClearingMemory] = useState(false);
+  
+  // Document Count State
+  const [documentCount, setDocumentCount] = useState<DocumentCount>({
+    total: 0,
+    processed: 0,
+    pending: 0,
+    indexed: 0
+  });
 
   useEffect(() => {
+    // Fetch documents
+    dispatch(fetchDocuments());
+    
+    // Fetch knowledge base data
     fetchGraphStats();
     fetchRelationships();
+    fetchDocumentCount();
     
     return () => {
       if (ws) {
         ws.close();
       }
     };
-  }, [ws]);
+  }, [dispatch, ws]);
 
+  // Document Management Functions
+  const handleProcessDocuments = async (id: number) => {
+    try {
+      setIsProcessing(true);
+      setToastMessage('Document processing started');
+      setShowToast(true);
+      await dispatch(processDocument(id)).unwrap();
+      setToastMessage('Documents processed successfully');
+      setShowToast(true);
+      await dispatch(fetchDocuments()).unwrap();
+      await fetchDocumentCount();
+    } catch (error) {
+      setToastMessage('Error processing documents');
+      setShowToast(true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleProcessPendingDocuments = async () => {
+    try {
+      setIsProcessingPending(true);
+      setToastMessage('Processing pending documents started');
+      setShowToast(true);
+      
+      const token = await get("token");
+      const response = await fetch(`${API_BASE_URL}/documents/process-pending`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process pending documents');
+      }
+
+      const result = await response.json();
+      setToastMessage(result.message || 'Pending documents processed successfully');
+      setShowToast(true);
+      
+      await dispatch(fetchDocuments()).unwrap();
+      await fetchDocumentCount();
+    } catch (error) {
+      setToastMessage('Error processing pending documents');
+      setShowToast(true);
+    } finally {
+      setIsProcessingPending(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      await dispatch(deleteDocument(id)).unwrap();
+      setToastMessage('File deleted successfully');
+      setShowToast(true);
+      await dispatch(fetchDocuments()).unwrap();
+      await fetchDocumentCount();
+    } catch (error) {
+      setToastMessage('Error deleting file');
+      setShowToast(true);
+    }
+  };
+
+  const handleView = (filename: string) => {
+    window.open(`${API_BASE_URL}/files/file/${filename}`, '_blank');
+  };
+
+  // Knowledge Base Functions
   const fetchGraphStats = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/graph-rag/stats`, {
@@ -117,7 +284,6 @@ const KnowledgeBaseManagement: React.FC = () => {
       console.error('Error fetching graph stats:', error);
       setToastMessage('Failed to fetch graph statistics');
       setShowToast(true);
-      // Set default values if API fails
       setGraphStats({
         totalNodes: 0,
         totalRelationships: 0,
@@ -148,42 +314,36 @@ const KnowledgeBaseManagement: React.FC = () => {
       console.error('Error fetching relationships:', error);
       setToastMessage('Failed to fetch relationships');
       setShowToast(true);
-      setRelationships([]); // Clear relationships on error
+      setRelationships([]);
     }
   };
 
-  // Add new handler for Relik KG creation
-  const handleRelikIndex = async () => {
-    setIsReindexing(true);
-    setToastMessage('Knowledge Graph creation using Relik started...');
-    setShowToast(true);
-
+  const fetchDocumentCount = async () => {
     try {
-      // Trigger the Relik processing
-      const response = await fetch(`${API_BASE_URL}/relik/process-documents`, {
-        method: 'POST',
+      const token = await get("token");
+      const response = await fetch(`${API_BASE_URL}/documents/count`, {
+        method: 'GET',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         }
       });
 
       if (!response.ok) {
-        throw new Error('Failed to trigger Relik KG creation');
+        throw new Error('Failed to fetch document count');
       }
 
-      // Show success message
-      setToastMessage('Knowledge Graph creation using Relik completed');
-      setShowToast(true);
-
-      // Refresh the stats and relationships
-      await Promise.all([fetchGraphStats(), fetchRelationships()]);
+      const data = await response.json();
+      setDocumentCount(data);
     } catch (error) {
-      console.error('Error during Relik KG creation:', error);
-      setToastMessage(error instanceof Error ? error.message : 'Error during Relik KG creation');
-      setShowToast(true);
-    } finally {
-      setIsReindexing(false);
+      console.error('Error fetching document count:', error);
+      setDocumentCount({
+        total: 0,
+        processed: 0,
+        pending: 0,
+        indexed: 0
+      });
     }
   };
 
@@ -193,7 +353,6 @@ const KnowledgeBaseManagement: React.FC = () => {
     setShowToast(true);
 
     try {
-      // First, trigger the processing
       const response = await fetch(`${API_BASE_URL}/graph-rag/process-documents`, {
         method: 'POST',
         headers: {
@@ -206,22 +365,18 @@ const KnowledgeBaseManagement: React.FC = () => {
         throw new Error('Failed to trigger KG creation');
       }
 
-      // Then establish WebSocket connection
       const websocket = new WebSocket(`ws://${API_BASE_URL.replace('http://', '')}/graph-rag/ws/process-documents`);
 
       websocket.onmessage = (event) => {
         const status: ProcessingStatus = JSON.parse(event.data);
         setProcessingStatus(status);
 
-        // Update toast with progress
         setToastMessage(`${status.message} (${status.progress.toFixed(0)}%)`);
         setShowToast(true);
 
-        // When processing is complete or has errored
         if (status.status === 'completed' || status.status === 'error') {
           setIsReindexing(false);
           websocket.close();
-          // Refresh the stats and relationships
           Promise.all([fetchGraphStats(), fetchRelationships()]);
         }
       };
@@ -247,133 +402,377 @@ const KnowledgeBaseManagement: React.FC = () => {
     }
   };
 
+  // Clear Memory Function
+  const handleClearMemory = async () => {
+    try {
+      setIsClearingMemory(true);
+      setToastMessage('Clearing memory...');
+      setShowToast(true);
+      
+      const token = await get("token");
+      const response = await fetch(`${API_BASE_URL}/memory/memory/clear-neo4j`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to clear memory');
+      }
+
+      const result = await response.json();
+      setToastMessage(result.message || 'Memory cleared successfully');
+      setShowToast(true);
+      
+      // Refresh stats after clearing
+      await Promise.all([fetchGraphStats(), fetchRelationships()]);
+      
+    } catch (error) {
+      console.error('Error clearing memory:', error);
+      setToastMessage('Error clearing memory');
+      setShowToast(true);
+    } finally {
+      setIsClearingMemory(false);
+    }
+  };
+
   const handleRefresh = (event: CustomEvent) => {
-    Promise.all([fetchGraphStats(), fetchRelationships()]).then(() => {
+    Promise.all([
+      dispatch(fetchDocuments()),
+      fetchGraphStats(), 
+      fetchRelationships(),
+      fetchDocumentCount()
+    ]).then(() => {
       event.detail.complete();
     });
   };
 
-  // Handle segment change
   const handleSegmentChange = (e: CustomEvent) => {
-    setSelectedSegment(e.detail.value ?? 'graph');
+    setSelectedSegment(e.detail.value ?? 'documents');
   };
 
+  // Document table helper functions
+  const formatDate = (dateString: string): string => {
+    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    return new Date(dateString).toLocaleDateString(undefined, options);
+  };
+
+  const getIndexedStatusClass = (isIndexed: boolean): string => {
+    return isIndexed ? 'status-processed' : 'status-pending';
+  };
+
+  // Document table columns
+  const columns = [
+    {
+      name: 'Filename',
+      selector: (row: Document) => row.filename,
+      sortable: true,
+    },
+    {
+      name: 'Type',
+      selector: (row: Document) => row.type,
+      sortable: true,
+    },
+    {
+      name: 'Upload Date',
+      selector: (row: Document) => formatDate(row.created_at),
+      sortable: true,
+    },
+    {
+      name: 'Size',
+      selector: (row: Document) => formatFileSize(row.file_size),
+      sortable: true,
+    },
+    {
+      name: 'Status',
+      selector: (row: Document) => row.status,
+      cell: (row: Document) => (
+        <div className={`status-badge ${getStatusClass(row.status)}`}>
+          {row.status}
+        </div>
+      ),
+      sortable: true,
+    },
+    {
+      name: 'Indexed',
+      selector: (row: Document) => row.is_indexed,
+      cell: (row: Document) => (
+        <div className={`status-badge ${getIndexedStatusClass(row.is_indexed)}`}>
+          {row.is_indexed ? 'Yes' : 'No'}
+        </div>
+      ),
+      sortable: true,
+    },
+    {
+      name: 'Actions',
+      cell: (row: Document) => (
+        <div className="action-buttons">
+          <IonButton
+            fill="clear"
+            size="small"
+            onClick={() => handleView(row.filename)}
+          >
+            <IonIcon icon={eye} />
+          </IonButton>
+          <IonButton
+            fill="clear"
+            size="small"
+            color="danger"
+            onClick={() => handleDelete(row.id)}
+          >
+            <IonIcon icon={trash} />
+          </IonButton>
+        </div>
+      ),
+      ignoreRowClick: true,
+      allowOverflow: true,
+      button: true,
+    },
+  ];
 
   return (
     <IonPage>
       <Header title="Knowledge Base Management" />
-      <Container>
-        <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
-          <IonRefresherContent></IonRefresherContent>
-        </IonRefresher>
+      <IonContent>
+        <Container>
+          <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
+            <IonRefresherContent></IonRefresherContent>
+          </IonRefresher>
 
-        <div className="knowledge-base-container">
-          {/* Reindex Card */}
-          {/* <IonCard className="reindex-card">
-            <IonCardHeader>
-              <IonCardTitle>Knowledge Graph Management</IonCardTitle>
-            </IonCardHeader>
-            <IonCardContent>
-              <p>Last indexed: {graphStats.lastIndexed || 'Not available'}</p>
-              
-              {isReindexing && (
-                <div className="indexing-status">
-                  <IonProgressBar value={processingStatus.progress / 100}></IonProgressBar>
-                  <p>
-                    <IonIcon icon={hourglassOutline} />
-                    {processingStatus.message || 'Processing documents...'}
-                    ({processingStatus.processed_documents}/{processingStatus.total_documents})
-                  </p>
-                </div>
-              )}
-              
+          <div className="knowledge-base-container">
+            {/* Stats Cards */}
+            <IonGrid>
+              <IonRow>
+                <IonCol size="12" sizeMd="3">
+                  <IonCard className="stat-card">
+                    <IonCardContent>
+                      <div className="stat-value">{documentCount.total}</div>
+                      <div className="stat-label">Total Documents</div>
+                    </IonCardContent>
+                  </IonCard>
+                </IonCol>
+                <IonCol size="12" sizeMd="3">
+                  <IonCard className="stat-card">
+                    <IonCardContent>
+                      <div className="stat-value">{documentCount.indexed}</div>
+                      <div className="stat-label">Indexed Documents</div>
+                    </IonCardContent>
+                  </IonCard>
+                </IonCol>
+                <IonCol size="12" sizeMd="3">
+                  <IonCard className="stat-card">
+                    <IonCardContent>
+                      <div className="stat-value">{graphStats.totalNodes}</div>
+                      <div className="stat-label">Knowledge Nodes</div>
+                    </IonCardContent>
+                  </IonCard>
+                </IonCol>
+                <IonCol size="12" sizeMd="3">
+                  <IonCard className="stat-card">
+                    <IonCardContent>
+                      <div className="stat-value">{graphStats.totalRelationships}</div>
+                      <div className="stat-label">Relationships</div>
+                    </IonCardContent>
+                  </IonCard>
+                </IonCol>
+              </IonRow>
+            </IonGrid>
+
+            {/* Action Buttons */}
+            <div className="document-actions">
+              <IonButton onClick={() => setShowUploadModal(true)}>
+                <IonIcon icon={cloudUpload} slot="start" />
+                Upload Documents
+              </IonButton>
+              <IonButton onClick={() => handleProcessDocuments(documents[0]?.id)}>
+                {isProcessing ? <IonSpinner name="crescent" /> : <IonIcon icon={book} slot="start" />}
+                Process Documents
+              </IonButton>
+              <IonButton onClick={handleProcessPendingDocuments}>
+                {isProcessingPending ? <IonSpinner name="crescent" /> : <IonIcon icon={book} slot="start" />}
+                Index Pending Documents
+              </IonButton>
               <IonButton
-                expand="block"
+                color="secondary"
                 onClick={handleReindex}
                 disabled={isReindexing}
               >
-                <IonIcon slot="start" icon={refreshCircle} />
-                Rebuild Knowledge Graph WITH LLM
+                {isReindexing ? <IonSpinner name="crescent" /> : <IonIcon icon={refreshCircle} slot="start" />}
+                Rebuild Knowledge Graph
               </IonButton>
-              
               <IonButton
-                expand="block"
-                color="secondary"
-                onClick={handleRelikIndex}
-                disabled={isReindexing}
-                style={{ marginTop: '8px' }}
+                color="danger"
+                onClick={handleClearMemory}
+                disabled={isClearingMemory}
               >
-                <IonIcon slot="start" icon={refreshCircle} />
-                Rebuild with Relik
-              </IonButton> 
-            </IonCardContent>
-          </IonCard> */}
+                {isClearingMemory ? <IonSpinner name="crescent" /> : <IonIcon icon={nuclear} slot="start" />}
+                Clear Memory
+              </IonButton>
+            </div>
 
-          {/* Stats Cards */}
-          <IonGrid>
-            <IonRow>
-              <IonCol size="12" sizeMd="3">
-                <IonCard className="stat-card">
-                  <IonCardContent>
-                    <div className="stat-value">{graphStats.totalNodes}</div>
-                    <div className="stat-label">Total Nodes</div>
-                  </IonCardContent>
-                </IonCard>
-              </IonCol>
-              <IonCol size="12" sizeMd="3">
-                <IonCard className="stat-card">
-                  <IonCardContent>
-                    <div className="stat-value">{graphStats.totalRelationships}</div>
-                    <div className="stat-label">Total Relationships</div>
-                  </IonCardContent>
-                </IonCard>
-              </IonCol>
-              <IonCol size="12" sizeMd="3">
-                <IonCard className="stat-card">
-                  <IonCardContent>
-                    <div className="stat-value">{graphStats.totalDocuments}</div>
-                    <div className="stat-label">Total Documents</div>
-                  </IonCardContent>
-                </IonCard>
-              </IonCol>
-              <IonCol size="12" sizeMd="3">
-                <IonCard className="stat-card">
-                  <IonCardContent>
-                    <div className="stat-value">{graphStats.averageRelationsPerNode.toFixed(1)}</div>
-                    <div className="stat-label">Avg. Relations per Node</div>
-                  </IonCardContent>
-                </IonCard>
-              </IonCol>
-            </IonRow>
-          </IonGrid>
+            {/* Indexing Progress */}
+            {isReindexing && (
+              <IonCard className="reindex-card">
+                <IonCardContent>
+                  <div className="indexing-status">
+                    <IonProgressBar value={processingStatus.progress / 100}></IonProgressBar>
+                    <p>
+                      <IonIcon icon={hourglassOutline} />
+                      {processingStatus.message || 'Processing documents...'}
+                      ({processingStatus.processed_documents}/{processingStatus.total_documents})
+                    </p>
+                  </div>
+                </IonCardContent>
+              </IonCard>
+            )}
 
-          {/* Segment for switching between Graph and Table views */}
-          <IonSegment value={selectedSegment} onIonChange={handleSegmentChange}>
-            <IonSegmentButton value="graph">
-              <IonLabel>Graph View</IonLabel>
-            </IonSegmentButton>
-            <IonSegmentButton value="table">
-              <IonLabel>Table View</IonLabel>
-            </IonSegmentButton>
-          </IonSegment>
-          <div style={{ marginTop: 16 }}>
-            {selectedSegment === 'graph' && (
-              <GraphView relationships={relationships} />
-            )}
-            {selectedSegment === 'table' && (
-              <TableView relationships={relationships} />
-            )}
+            {/* Segment for switching between views */}
+            <IonSegment value={selectedSegment} onIonChange={handleSegmentChange}>
+              <IonSegmentButton value="documents">
+                <IonLabel>Documents</IonLabel>
+              </IonSegmentButton>
+              <IonSegmentButton value="graph">
+                <IonLabel>Graph View</IonLabel>
+              </IonSegmentButton>
+              <IonSegmentButton value="table">
+                <IonLabel>Relations Table</IonLabel>
+              </IonSegmentButton>
+            </IonSegment>
+
+            <div style={{ marginTop: 16 }}>
+              {selectedSegment === 'documents' && (
+                <div className="document-table">
+                  <DataTable
+                    columns={columns}
+                    data={documents}
+                    pagination
+                    highlightOnHover
+                    responsive
+                    striped
+                    noDataComponent="No documents found"
+                  />
+                </div>
+              )}
+              {selectedSegment === 'graph' && (
+                <GraphView relationships={relationships} />
+              )}
+              {selectedSegment === 'table' && (
+                <TableView relationships={relationships} />
+              )}
+            </div>
           </div>
-        </div>
 
-        <IonToast
-          isOpen={showToast}
-          onDidDismiss={() => setShowToast(false)}
-          message={toastMessage}
-          duration={3000}
-          position="bottom"
-        />
-      </Container>
+          {/* Upload Modal */}
+          <IonModal
+            isOpen={showUploadModal}
+            onDidDismiss={() => setShowUploadModal(false)}
+          >
+            <IonHeader>
+              <IonToolbar>
+                <IonTitle>Upload Document</IonTitle>
+                <IonButtons slot="end">
+                  <IonButton onClick={() => setShowUploadModal(false)}>
+                    <IonIcon icon={close} />
+                  </IonButton>
+                </IonButtons>
+              </IonToolbar>
+            </IonHeader>
+            <IonContent className="ion-padding">
+              <div className="upload-modal-content">
+                <FilePondComponent
+                  ref={pondRef}
+                  files={files}
+                  onupdatefiles={setFiles}
+                  allowMultiple={true}
+                  allowReorder={true}
+                  maxFiles={10}
+                  credits={false}
+                  instantUpload={true}
+                  labelIdle='Drag & Drop your files or <span class="filepond--label-action">Browse</span><br/><small>Accepted files: PDF, Markdown, JSON, Text, Word (.doc, .docx)</small>'
+                  labelFileProcessing="Uploading"
+                  labelFileProcessingComplete="Upload complete"
+                  labelFileProcessingAborted="Upload cancelled"
+                  labelFileProcessingError="Error during upload"
+                  labelTapToCancel="tap to cancel"
+                  labelTapToRetry="tap to retry"
+                  labelTapToUndo="tap to undo"
+                  styleProgressIndicatorPosition="right"
+                  styleButtonRemoveItemPosition="right"
+                  styleButtonProcessItemPosition="right"
+                  styleItemPanelAspectRatio={1}
+                  stylePanelAspectRatio={0.5}
+                  server={{
+                    process: (fieldName: any, file: any, metadata: any, load: any, error: any, progress: any, abort: any) => {
+                      const formData = new FormData();
+                      formData.append('files', file, file.name);
+                      
+                      const uploadInstance = axios.create({
+                        baseURL: API_BASE_URL,
+                        timeout: 100000,
+                        headers: {
+                          'Accept': 'application/json',
+                        }
+                      });
+                      
+                      get("token").then(token => {
+                        if (token) {
+                          uploadInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                        }
+                        
+                         uploadInstance.post(`/documents/upload`, formData, {
+                           onUploadProgress: (e:any) => {
+                             progress(e.lengthComputable, e.loaded, e.total);
+                           },
+                         })
+                         .then(response => {
+                           load(JSON.stringify(response.data));
+                           console.log('Upload successful:', response.data);
+                           dispatch(fetchDocuments());
+                           fetchDocumentCount();
+                         })
+                         .catch(err => {
+                           error(err.response?.data?.detail || 'Upload failed');
+                           console.error('Upload failed:', err);
+                           setToastMessage('File upload failed');
+                           setShowToast(true);
+                         });
+                       }).catch(err => {
+                         console.error('Error getting token:', err);
+                         error('Authentication error');
+                       });
+
+                      return {
+                        abort: () => {
+                          abort();
+                        }
+                      };
+                    },
+                  }}
+                  acceptedFileTypes={[
+                    'application/pdf',
+                    'text/markdown',
+                    'application/json',
+                    'text/plain',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'application/msword'
+                  ]}
+                />
+              </div>
+            </IonContent>
+          </IonModal>
+        </Container>
+      </IonContent>
+
+      <IonToast
+        isOpen={showToast}
+        onDidDismiss={() => setShowToast(false)}
+        message={toastMessage}
+        duration={3000}
+        position="bottom"
+      />
     </IonPage>
   );
 };

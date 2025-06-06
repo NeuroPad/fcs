@@ -25,6 +25,14 @@ from .search import (
 )
 from .node_operations import detect_and_create_node_contradictions
 from .default_values_handler import apply_default_values_to_new_nodes
+from .salience_manager import (
+    SalienceManager,
+    SalienceConfig,
+)
+from .salience_scheduler import (
+    SalienceScheduler,
+    setup_salience_scheduler,
+)
 
 __all__ = [
     'ExtendedGraphiti',
@@ -34,4 +42,8 @@ __all__ = [
     'enhanced_contradiction_search',
     'detect_and_create_node_contradictions',
     'apply_default_values_to_new_nodes',
+    'SalienceManager',
+    'SalienceConfig',
+    'SalienceScheduler',
+    'setup_salience_scheduler',
 ] 

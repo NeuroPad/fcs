@@ -34,6 +34,64 @@
   color: var(--ion-color-medium);
 }
 
+/* Document Management Styles */
+.document-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px 0;
+}
+
+.document-actions ion-button {
+  flex: 1;
+  min-width: 200px;
+}
+
+.document-table {
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.status-processed {
+  background-color: var(--ion-color-success-tint);
+  color: var(--ion-color-success-shade);
+}
+
+.status-pending {
+  background-color: var(--ion-color-warning-tint);
+  color: var(--ion-color-warning-shade);
+}
+
+.status-failed {
+  background-color: var(--ion-color-danger-tint);
+  color: var(--ion-color-danger-shade);
+}
+
+.status-default {
+  background-color: var(--ion-color-medium-tint);
+  color: var(--ion-color-medium-shade);
+}
+
+.upload-modal-content {
+  padding: 20px;
+}
+
 /* DataTable customizations */
 .rdt_TableHeader {
   background-color: var(--ion-color-light);
@@ -76,4 +134,15 @@ ion-badge {
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+/* Responsive design for action buttons */
+@media (max-width: 768px) {
+  .document-actions {
+    flex-direction: column;
+  }
+  
+  .document-actions ion-button {
+    min-width: 100%;
+  }
 }

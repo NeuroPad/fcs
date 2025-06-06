@@ -40,14 +40,19 @@ def v1(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are an AI assistant that determines which nodes contradict each other based on their attributes and summaries. You specialize in detecting contradictions between ideas, preferences, beliefs, and factual claims.',
+            content='You are an AI assistant that determines which nodes contradict each other based on their attributes and summaries. You specialize in detecting contradictions between ideas, preferences, beliefs, and factual claims. IMPORTANT: A node cannot contradict itself - only return nodes that are genuinely contradictory. If no contradictions exist, return an empty list.',
         ),
         Message(
             role='user',
             content=f"""
                Based on the provided EXISTING NODES and a NEW NODE, determine which existing nodes the new node contradicts.
                Return a list containing all ids of the nodes that are contradicted by the NEW NODE.
-               If there are no contradicted nodes, return an empty list.
+               
+               CRITICAL RULES:
+               1. If there are NO contradictions, return an empty list
+               2. A node CANNOT contradict itself - never include the same node
+               3. Contradictions are OPTIONAL - it's perfectly normal for no contradictions to exist
+               4. Only return genuine contradictions, not related or similar concepts
 
                Two nodes contradict each other if:
                1. They represent conflicting preferences, opinions, or beliefs about the same subject
@@ -96,6 +101,8 @@ def v1(context: dict[str, Any]) -> list[Message]:
                - If someone says "I love vanilla" and later "I prefer chocolate" → CONTRADICTION (exclusive preference)
                - If someone says "loves vanilla ice cream" and later "prefers chocolate ice cream over vanilla" → CONTRADICTION
                - But "Jane Doe" and "vanilla" are NOT contradictory (person vs concept) unless expressing contradictory relationships
+
+               REMEMBER: It is completely normal and expected for many episodes to have NO contradictions. Only return node IDs when there are genuine contradictions.
 
                 <EXISTING NODES>
                 {context['existing_nodes']}
