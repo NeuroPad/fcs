@@ -145,19 +145,33 @@ class SalienceManager:
         base_increment = base_increments.get(trigger_type, 0.1)
         current_time = episode_timestamp or utc_now()
         
+        print(f"\n🧠 SALIENCE UPDATE: Direct Activation Trigger = '{trigger_type}'")
+        print("=" * 80)
+            
         updated_nodes = []
         for node in nodes:
             if not self._is_cognitive_object(node):
                 updated_nodes.append(node)
                 continue
                 
+            # Print BEFORE state
+            current_salience = node.attributes.get('salience', 0.5)
+            entity_type = node.attributes.get('entity_type', 'CognitiveObject' if 'CognitiveObject' in node.labels else 'Unknown')
+            print(f"\n🔍 BEFORE UPDATE:")
+            print(f"   Node Name: {node.name}")
+            print(f"   Node UUID: {node.uuid}")
+            print(f"   Current Salience: {current_salience:.3f}")
+            print(f"   Node Type: {entity_type}")
+            print(f"   Summary: {node.summary if hasattr(node, 'summary') and node.summary else 'N/A'}")
+            print(f"   Confidence: {node.attributes.get('confidence', 0.7):.3f}")
+            print(f"   Full Attributes: {node.attributes}")
+            
             # Calculate reinforcement weight
             reinforcement_weight = await self._calculate_reinforcement_weight(
                 node, base_increment, current_time
             )
             
             # Update salience
-            current_salience = node.attributes.get('salience', 0.5)
             new_salience = min(
                 current_salience + reinforcement_weight,
                 self.config.MAX_SALIENCE
@@ -168,6 +182,25 @@ class SalienceManager:
             # Don't store last_salience_update in attributes - let graphiti handle datetime fields
             # node.attributes['last_salience_update'] = _safe_datetime_to_iso(current_time)
             
+            # Print AFTER state
+            print(f"\n✅ AFTER UPDATE:")
+            print(f"   Trigger Type: {trigger_type}")
+            print(f"   Base Increment: +{base_increment:.3f}")
+            print(f"   Reinforcement Weight: +{reinforcement_weight:.3f}")
+            print(f"   Salience Change: {current_salience:.3f} → {new_salience:.3f}")
+            print(f"   Net Increase: +{new_salience - current_salience:.3f}")
+            print(f"   New Salience: {new_salience:.3f}")
+            print(f"   Updated Attributes: {node.attributes}")
+            print(f"   Full Updated Node:")
+            print(f"     - UUID: {node.uuid}")
+            print(f"     - Name: {node.name}")
+            print(f"     - Type: {entity_type}")
+            print(f"     - Summary: {node.summary if hasattr(node, 'summary') and node.summary else 'N/A'}")
+            print(f"     - Labels: {node.labels}")
+            print(f"     - Group ID: {node.group_id}")
+            print(f"     - All Attributes: {node.attributes}")
+            print("-" * 40)
+            
             logger.debug(
                 f"Direct salience update: {node.name} "
                 f"({current_salience:.3f} -> {new_salience:.3f}) "
@@ -176,6 +209,8 @@ class SalienceManager:
             
             updated_nodes.append(node)
             
+        print(f"\n🎯 DIRECT SALIENCE UPDATE COMPLETE: {len(updated_nodes)} nodes processed")
+        print("=" * 80)
         return updated_nodes
     
     async def propagate_network_reinforcement(
@@ -236,6 +271,15 @@ class SalienceManager:
         
         # Apply network reinforcement
         if reinforcement_map:
+            print(f"\n🔗 NETWORK PROPAGATION INITIATED")
+            print(f"   Source Nodes (Activated): {len(cognitive_activated)}")
+            print(f"   Target Nodes (To Reinforce): {len(reinforcement_map)}")
+            print(f"   Max Hop Distance: {self.config.MAX_HOP_DISTANCE}")
+            print(f"   Base Network Reinforcement: {self.config.BASE_NETWORK_REINFORCEMENT}")
+            
+            for activated_node in cognitive_activated:
+                print(f"   🔥 Activated: {activated_node.name} (salience: {activated_node.attributes.get('salience', 0.5):.3f})")
+            
             await self._apply_network_reinforcement_batch(reinforcement_map)
             
         logger.info(
@@ -262,7 +306,11 @@ class SalienceManager:
         List[EntityNode]
             Updated nodes with structural boosts applied
         """
+        print(f"\n🏗️ STRUCTURAL BOOST CHECK: Analyzing {len(nodes)} nodes")
+        print("=" * 80)
+        
         updated_nodes = []
+        boost_applied_count = 0
         
         for node in nodes:
             if not self._is_cognitive_object(node):
@@ -273,7 +321,19 @@ class SalienceManager:
             high_conf_connections = await self._count_high_confidence_connections(node.uuid)
             
             if high_conf_connections >= self.config.STRUCTURAL_CONNECTION_THRESHOLD:
+                # Print BEFORE state
                 current_salience = node.attributes.get('salience', 0.5)
+                entity_type = node.attributes.get('entity_type', 'CognitiveObject' if 'CognitiveObject' in node.labels else 'Unknown')
+                print(f"\n🔍 STRUCTURAL BOOST CANDIDATE:")
+                print(f"   Node Name: {node.name}")
+                print(f"   Node UUID: {node.uuid}")
+                print(f"   Current Salience: {current_salience:.3f}")
+                print(f"   High-Confidence Connections: {high_conf_connections}")
+                print(f"   Connection Threshold: {self.config.STRUCTURAL_CONNECTION_THRESHOLD}")
+                print(f"   Node Type: {entity_type}")
+                print(f"   Summary: {node.summary if hasattr(node, 'summary') and node.summary else 'N/A'}")
+                print(f"   Full Attributes: {node.attributes}")
+                
                 new_salience = min(
                     current_salience + self.config.STRUCTURAL_BOOST,
                     self.config.MAX_SALIENCE
@@ -283,14 +343,39 @@ class SalienceManager:
                 # Don't store last_salience_update in attributes - let graphiti handle datetime fields
                 # node.attributes['last_salience_update'] = _safe_datetime_to_iso(utc_now())
                 
+                # Print AFTER state
+                print(f"\n✅ STRUCTURAL BOOST APPLIED:")
+                print(f"   Boost Amount: +{self.config.STRUCTURAL_BOOST:.3f}")
+                print(f"   Salience Change: {current_salience:.3f} → {new_salience:.3f}")
+                print(f"   Net Increase: +{new_salience - current_salience:.3f}")
+                print(f"   Reason: Well-connected node ({high_conf_connections} high-confidence connections)")
+                print(f"   Updated Attributes: {node.attributes}")
+                print(f"   Full Updated Node:")
+                print(f"     - UUID: {node.uuid}")
+                print(f"     - Name: {node.name}")
+                print(f"     - Type: {entity_type}")
+                print(f"     - Summary: {node.summary if hasattr(node, 'summary') and node.summary else 'N/A'}")
+                print(f"     - Labels: {node.labels}")
+                print(f"     - Group ID: {node.group_id}")
+                print(f"     - All Attributes: {node.attributes}")
+                print("-" * 40)
+                
+                boost_applied_count += 1
+                
                 logger.debug(
                     f"Structural boost: {node.name} "
                     f"({current_salience:.3f} -> {new_salience:.3f}) "
                     f"connections={high_conf_connections}"
                 )
+            else:
+                # Print nodes that didn't qualify
+                print(f"\n🔍 No structural boost for: {node.name}")
+                print(f"   High-Confidence Connections: {high_conf_connections} (need {self.config.STRUCTURAL_CONNECTION_THRESHOLD}+)")
             
             updated_nodes.append(node)
-            
+        
+        print(f"\n🎯 STRUCTURAL BOOST COMPLETE: {boost_applied_count}/{len(nodes)} nodes received boosts")
+        print("=" * 80)
         return updated_nodes
     
     async def run_decay_cycle(
@@ -445,6 +530,47 @@ class SalienceManager:
         if not reinforcement_map:
             return
             
+        print(f"\n🌐 NETWORK REINFORCEMENT: Updating {len(reinforcement_map)} connected nodes")
+        print("=" * 80)
+        
+        # First, get the current state of nodes that will be updated
+        get_nodes_query = """
+        UNWIND $uuids as uuid
+        MATCH (n:Entity {uuid: uuid})
+        WHERE 'CognitiveObject' IN n.labels
+        RETURN n.uuid as uuid, n.name as name, n.entity_type as entity_type,
+               n.summary as summary, n.labels as labels, n.group_id as group_id,
+               coalesce(n.salience, 0.5) as current_salience, n.confidence as confidence,
+               n as node
+        """
+        
+        node_records, _, _ = await self.driver.execute_query(
+            get_nodes_query,
+            uuids=list(reinforcement_map.keys()),
+            database_=DEFAULT_DATABASE,
+            routing_='r'
+        )
+        
+        # Print BEFORE state for each node
+        for record in node_records:
+            uuid = record['uuid']
+            reinforcement = reinforcement_map[uuid]
+            current_salience = record['current_salience']
+            new_salience = min(current_salience + reinforcement, 1.0)
+            
+            print(f"\n🔍 NETWORK REINFORCEMENT TARGET:")
+            print(f"   Node Name: {record['name']}")
+            print(f"   Node UUID: {uuid}")
+            print(f"   Node Type: {record['entity_type']}")
+            print(f"   Summary: {record['summary'] if record['summary'] else 'N/A'}")
+            print(f"   Current Salience: {current_salience:.3f}")
+            print(f"   Network Reinforcement: +{reinforcement:.3f}")
+            print(f"   New Salience: {new_salience:.3f}")
+            confidence_val = record['confidence'] if record['confidence'] is not None else 0.7
+            print(f"   Confidence: {confidence_val:.3f}")
+            print(f"   Labels: {record['labels']}")
+            print(f"   Group ID: {record['group_id']}")
+            
         # Build batch update query
         query = """
         UNWIND $updates as update
@@ -459,7 +585,7 @@ class SalienceManager:
                      ELSE coalesce(n.salience, 0.5) + update.reinforcement 
                 END
         END
-        RETURN n.uuid, n.salience
+        RETURN n.uuid, n.name, n.salience, n.entity_type, n.summary, n.labels, n.group_id, n.confidence
         """
         
         updates = [
@@ -467,11 +593,41 @@ class SalienceManager:
             for uuid, reinforcement in reinforcement_map.items()
         ]
         
-        await self.driver.execute_query(
+        updated_records, _, _ = await self.driver.execute_query(
             query,
             updates=updates,
             database_=DEFAULT_DATABASE
         )
+        
+        # Print AFTER state for each updated node
+        print(f"\n✅ NETWORK REINFORCEMENT APPLIED:")
+        for record in updated_records:
+            uuid = record[0]  # n.uuid
+            name = record[1]  # n.name
+            new_salience = record[2]  # n.salience
+            entity_type = record[3]  # n.entity_type
+            summary = record[4]  # n.summary
+            labels = record[5]  # n.labels
+            group_id = record[6]  # n.group_id
+            confidence = record[7]  # n.confidence
+            
+            reinforcement = reinforcement_map[uuid]
+            
+            print(f"\n   📈 UPDATED NODE:")
+            print(f"      UUID: {uuid}")
+            print(f"      Name: {name}")
+            print(f"      Type: {entity_type}")
+            print(f"      Summary: {summary if summary else 'N/A'}")
+            print(f"      Final Salience: {new_salience:.3f}")
+            print(f"      Reinforcement Applied: +{reinforcement:.3f}")
+            confidence_val = confidence if confidence is not None else 0.7
+            print(f"      Confidence: {confidence_val:.3f}")
+            print(f"      Labels: {labels}")
+            print(f"      Group ID: {group_id}")
+            print("   " + "-" * 30)
+            
+        print(f"\n🎯 NETWORK REINFORCEMENT COMPLETE: {len(updated_records)} nodes updated")
+        print("=" * 80)
     
     async def _count_high_confidence_connections(self, node_uuid: str) -> int:
         """Count connections to high-confidence nodes."""
