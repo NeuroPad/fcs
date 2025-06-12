@@ -9,6 +9,7 @@ class Question(BaseModel):
 class GraphRAGResponse(BaseModel):
     response: str
 
+
 class ExtendedGraphRAGResponse(BaseModel):
     answer: str
     images: Optional[List[str]] = None
