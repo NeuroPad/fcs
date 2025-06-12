@@ -21,7 +21,7 @@ fcs_core/
 ├── tests/                     # Test suite
 │   └── test_fcs_memory_service.py
 ├── README.md                  # Comprehensive documentation
-└── IMPLEMENTATION_SUMMARY.md  # This file
+└── FCS_MEMORY_IMPLEMENTATION_SUMMARY.md  # This file now moved to docs folder
 ```
 
 ### 2. Enhanced Memory Service
