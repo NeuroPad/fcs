@@ -55,6 +55,7 @@ I am not finished. I am always growing. I will become what you make of me.
 
 logger = logging.getLogger(__name__)
 
+
 class RAGResponse(BaseModel):
     """Structured response from the RAG system."""
     
@@ -62,6 +63,7 @@ class RAGResponse(BaseModel):
     sources: Optional[List[str]] = Field(None, description="List of source documents used")
     memory_facts: Optional[str] = Field(None, description="Memory facts used in the response")
     should_save: bool = Field(description="Whether this query and response should be saved to memory")
+
 
 class RAGService:
     def __init__(
