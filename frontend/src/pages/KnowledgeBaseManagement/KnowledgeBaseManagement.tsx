@@ -219,7 +219,7 @@ const KnowledgeBaseManagement: React.FC = () => {
       setShowToast(true);
       
       const token = await get("token");
-      const response = await fetch(`${API_BASE_URL}/documents/process-pending`, {
+      const response = await fetch(`${API_BASE_URL}/rag/process-pending`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',

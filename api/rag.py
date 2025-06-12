@@ -36,7 +36,7 @@ async def index_document(
             raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
         
         # Add document processing to background tasks
-        background_tasks.add_task(rag_service.process_document, document, db)
+        background_tasks.add_task(rag_service.process_document, document.id)
         
         return JSONResponse(content={
             "status": "processing",

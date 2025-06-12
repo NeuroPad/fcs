@@ -147,70 +147,102 @@ class RAGService:
             storage_context=storage_context
         )
     
-    async def process_document(self, db_document: DBDocument, db: Session) -> Dict[str, Any]:
+    async def process_document(self, document_id: int, db: Session = None) -> Dict[str, Any]:
         """Process a document and add it to the RAG index"""
         try:
-            # Get file path
-            file_path = Path(db_document.file_path)
-            
-            # Update document status
-            db_document.status = "processing"
-            db.commit()
-            db.refresh(db_document)
-            
-            # Extract text based on file type
-            if db_document.markdown_path:
-                # If markdown path exists, use it
-                reader = SimpleDirectoryReader(
-                    input_files=[db_document.markdown_path]
-                )
-                documents = reader.load_data()
+            # Create a new session if not provided
+            if db is None:
+                from db.session import SessionLocal
+                db = SessionLocal()
+                should_close_db = True
             else:
-                # Otherwise, load the original file
-                reader = SimpleDirectoryReader(
-                    input_files=[str(file_path)]
-                )
-                documents = reader.load_data()
+                should_close_db = False
             
-            # Add user_id to metadata for multi-tenancy
-            for doc in documents:
-                doc.metadata["user_id"] = str(db_document.user_id)
-                doc.metadata["filename"] = db_document.filename
-                doc.metadata["document_id"] = str(db_document.id)
+            try:
+                # Get the document from the database
+                db_document = db.query(DBDocument).filter(DBDocument.id == document_id).first()
+                if not db_document:
+                    return {
+                        "status": "error",
+                        "message": f"Document with ID {document_id} not found",
+                        "document_id": document_id
+                    }
+                
+                # Get file path
+                file_path = Path(db_document.file_path)
+                
+                # Update document status
+                db_document.status = "processing"
+                db.commit()
+                db.refresh(db_document)
+                
+                # Extract text based on file type
+                if db_document.markdown_path:
+                    # If markdown path exists, use it
+                    reader = SimpleDirectoryReader(
+                        input_files=[db_document.markdown_path]
+                    )
+                    documents = reader.load_data()
+                else:
+                    # Otherwise, load the original file
+                    reader = SimpleDirectoryReader(
+                        input_files=[str(file_path)]
+                    )
+                    documents = reader.load_data()
+                
+                # Add user_id to metadata for multi-tenancy
+                for doc in documents:
+                    doc.metadata["user_id"] = str(db_document.user_id)
+                    doc.metadata["filename"] = db_document.filename
+                    doc.metadata["document_id"] = str(db_document.id)
+                
+                # Process nodes
+                nodes = self.node_parser.get_nodes_from_documents(documents)
+                
+                # Insert nodes into the index
+                self.index.insert_nodes(nodes)
+                
+                # Update document status
+                db_document.status = "completed"
+                db_document.is_indexed = True
+                db_document.processed_at = datetime.utcnow()
+                db_document.indexed_at = datetime.utcnow()
+                db.commit()
+                db.refresh(db_document)
+                
+                return {
+                    "status": "success",
+                    "message": f"Document {db_document.filename} processed and indexed successfully",
+                    "document_id": db_document.id
+                }
             
-            # Process nodes
-            nodes = self.node_parser.get_nodes_from_documents(documents)
+            except Exception as e:
+                logger.error(f"Error processing document {document_id}: {str(e)}")
+                
+                # Update document status if we have the document
+                if 'db_document' in locals():
+                    db_document.status = "failed"
+                    db_document.error_message = str(e)
+                    db.commit()
+                    db.refresh(db_document)
+                
+                return {
+                    "status": "error",
+                    "message": f"Error processing document: {str(e)}",
+                    "document_id": document_id
+                }
             
-            # Insert nodes into the index
-            self.index.insert_nodes(nodes)
-            
-            # Update document status
-            db_document.status = "completed"
-            db_document.is_indexed = True
-            db_document.processed_at = datetime.utcnow()
-            db_document.indexed_at = datetime.utcnow()
-            db.commit()
-            db.refresh(db_document)
-            
-            return {
-                "status": "success",
-                "message": f"Document {db_document.filename} processed and indexed successfully",
-                "document_id": db_document.id
-            }
+            finally:
+                # Close the session if we created it
+                if should_close_db:
+                    db.close()
         
         except Exception as e:
-            logger.error(f"Error processing document {db_document.id}: {str(e)}")
-            
-            # Update document status
-            db_document.status = "failed"
-            db_document.error_message = str(e)
-            db.commit()
-            db.refresh(db_document)
-            
+            logger.error(f"Error processing document {document_id}: {str(e)}")
             return {
                 "status": "error",
                 "message": f"Error processing document: {str(e)}",
-                "document_id": db_document.id
+                "document_id": document_id
             }
     
     async def query(self, query_text: str, user_id: int, top_k: int = 5, chat_history: List[Dict[str, Any]] = None, user: Dict[str, Any] = None) -> ExtendedGraphRAGResponse:
@@ -398,21 +430,18 @@ class RAGService:
         try:
             # Get all documents that need indexing
             pending_documents = db.query(DBDocument).filter(
-                DBDocument.is_indexed == False,
-                or_(
-                    DBDocument.status == "pending",
-                    and_(
-                        DBDocument.status == "completed",
-                        DBDocument.markdown_path != None
-                    )
-                )
+                DBDocument.is_indexed == False
             ).all()
+            
+            print(f"DEBUG: Found {len(pending_documents)} pending documents")
+            for doc in pending_documents:
+                print(f"DEBUG: Document ID: {doc.id}, Filename: {doc.filename}, Status: {doc.status}, Is_indexed: {doc.is_indexed}")
             
             processed_count = 0
             failed_count = 0
             
             for doc in pending_documents:
-                result = await self.process_document(doc, db)
+                result = await self.process_document(doc.id, db)
                 if result["status"] == "success":
                     processed_count += 1
                 else:
