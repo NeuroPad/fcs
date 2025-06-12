@@ -1,4 +1,3 @@
-# services/image_rag_service.py
 import os
 from typing import List, Dict, Optional, Union
 from pathlib import Path
