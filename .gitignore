@@ -45,3 +45,4 @@ fcs.db
 #support docs items
 /fcs_docs
 /graphiti_docs
+/llama_index_agent_flow_docs
