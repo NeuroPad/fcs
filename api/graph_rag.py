@@ -9,7 +9,6 @@ from pathlib import Path
 from schemas import GraphRAGResponse, Question
 from schemas.graph_rag import ExtendedGraphRAGResponse
 from services.llama_index_graph_rag import GraphRAGService
-from services.image_rag_service import ImageRAGService
 from core.config import settings
 import logging
 
@@ -17,10 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 graph_rag_service = GraphRAGService()
-image_rag_service = ImageRAGService(
-    chroma_db_path=str(settings.CHROMA_DB_DIR),
-    markdown_dir=settings.PROCESSED_FILES_DIR,
-)
+
 
 
 @router.post("/process-documents")
@@ -61,39 +57,6 @@ async def ask_question(question: Question):
         raise HTTPException(400, str(e))
 
 
-@router.post("/index-markdown-images")
-async def index_markdown_images():
-    """Index all images from markdown directory"""
-    try:
-        result = image_rag_service.index_markdown_images()
-        return JSONResponse(content={"status": "success", **result})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/indexed-images")
-async def get_indexed_images():
-    """Get all indexed images information"""
-    try:
-        result = image_rag_service.get_indexed_images()
-        return JSONResponse(content=result)
-    except Exception as e:
-        # logger.error(f"Error getting indexed images: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/find-similar")
-async def find_similar_images(file: UploadFile = File(...), top_k: int = 5):
-    """Find similar images to the uploaded image"""
-    try:
-        image_data = await file.read()
-        result = image_rag_service.find_similar_images(
-            image_data=image_data, top_k=top_k
-        )
-        return JSONResponse(content=result)
-    except Exception as e:
-        # logger.error(f"Search error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/stats")

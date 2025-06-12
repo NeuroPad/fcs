@@ -11,15 +11,12 @@ from schemas import PageRange
 from utils.file_utils import process_file_upload
 from services.file_service import FileService
 from services.llama_index_graph_rag import GraphRAGService
-from services.image_rag_service import ImageRAGService
+
 
 router = APIRouter()
 
 graph_rag_service = GraphRAGService()
-image_rag_service = ImageRAGService(
-    chroma_db_path=str(settings.CHROMA_DB_DIR),
-    markdown_dir=settings.PROCESSED_FILES_DIR,
-)
+
 
 # Create directories if they don't exist
 for dir_path in [settings.UPLOAD_DIR, settings.PROCESSED_FILES_DIR]:
@@ -27,7 +24,7 @@ for dir_path in [settings.UPLOAD_DIR, settings.PROCESSED_FILES_DIR]:
 
 # Initialize service
 pdf_service = FileService(
-    settings.UPLOAD_DIR, settings.PROCESSED_FILES_DIR, image_rag_service=image_rag_service
+    settings.UPLOAD_DIR, settings.PROCESSED_FILES_DIR
 )
 
 logger = logging.getLogger(__name__)

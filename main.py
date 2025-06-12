@@ -10,18 +10,12 @@ import logging
 from pathlib import Path
 
 
-from services.image_rag_service import ImageRAGService
 from fcs_core import FCSMemoryService
 from fcs_core.async_worker import async_worker
 from services.document_service import DocumentService
 from api import router as api_router
 
 
-# Initialize the services
-image_rag_service = ImageRAGService(
-    chroma_db_path=str(settings.CHROMA_DB_DIR),
-    markdown_dir=settings.PROCESSED_FILES_DIR,
-)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
