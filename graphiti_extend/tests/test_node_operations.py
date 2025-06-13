@@ -19,7 +19,7 @@ from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodicNode, EpisodeType
 from graphiti_core.utils.datetime_utils import utc_now
 
-from graphiti_extend.node_operations import (
+from graphiti_extend.contradictions.handler import (
     get_node_contradictions,
     create_contradiction_edges,
     detect_and_create_node_contradictions,

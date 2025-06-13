@@ -1,6 +1,6 @@
 # FCS System Integration Guide
 
-This document explains how to integrate the `graphiti_extend` module with the FCS (Feedback and Clarification System) to handle contradictions in user statements.
+This document explains how to integrate the `graphiti_extend` module with the FCS to handle contradictions in user statements.
 
 ## Overview
 

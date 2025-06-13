@@ -163,7 +163,7 @@ Dictionary containing:
 Detect contradictions between a new node and existing nodes.
 
 ```python
-from graphiti_extend.node_operations import get_node_contradictions
+from graphiti_extend.contradictions.handler import get_node_contradictions
 
 contradicted_nodes = await get_node_contradictions(
     llm_client=llm_client,
@@ -179,7 +179,7 @@ contradicted_nodes = await get_node_contradictions(
 Create CONTRADICTS edges between nodes.
 
 ```python
-from graphiti_extend.node_operations import create_contradiction_edges
+from graphiti_extend.contradictions.handler import create_contradiction_edges
 
 contradiction_edges = await create_contradiction_edges(
     new_node=new_node,

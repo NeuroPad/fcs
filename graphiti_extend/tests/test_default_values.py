@@ -37,7 +37,7 @@ class TestDefaultValues:
     
     def test_default_values_extraction(self):
         """Test extracting default values from Pydantic model."""
-        from graphiti_extend.default_values_handler import _extract_default_values_from_model
+        from graphiti_extend.defaults.handler import _extract_default_values_from_model
         
         model = MockCognitiveObject
         defaults = _extract_default_values_from_model(model)
@@ -60,7 +60,7 @@ class TestDefaultValues:
 
     def test_apply_default_values(self):
         """Test applying default values to new nodes."""
-        from graphiti_extend.default_values_handler import apply_default_values_to_new_nodes
+        from graphiti_extend.defaults.handler import apply_default_values_to_new_nodes
         
         # Create test nodes
         extracted_nodes = [
@@ -128,7 +128,7 @@ class TestDefaultValues:
             "uuid-2": "existing-uuid",  # Existing node
         }
         
-        from graphiti_extend.default_values_handler import apply_default_values_to_new_nodes
+        from graphiti_extend.defaults.handler import apply_default_values_to_new_nodes
         entity_types = {"CognitiveObject": MockCognitiveObject}
         
         result_nodes = apply_default_values_to_new_nodes(
@@ -166,7 +166,7 @@ class TestDefaultValues:
             "uuid-3": "uuid-3",
         }
         
-        from graphiti_extend.default_values_handler import apply_default_values_to_new_nodes
+        from graphiti_extend.defaults.handler import apply_default_values_to_new_nodes
         entity_types = {"CognitiveObject": MockCognitiveObject}
         
         result_nodes = apply_default_values_to_new_nodes(
@@ -189,7 +189,7 @@ class TestDefaultValues:
 
 def test_default_values_extraction_standalone():
     """Standalone test for default values extraction."""
-    from graphiti_extend.default_values_handler import _extract_default_values_from_model
+    from graphiti_extend.defaults.handler import _extract_default_values_from_model
     
     model = MockCognitiveObject
     defaults = _extract_default_values_from_model(model)
@@ -213,7 +213,7 @@ def test_default_values_extraction_standalone():
 
 def test_apply_default_values_standalone():
     """Standalone test for applying default values."""
-    from graphiti_extend.default_values_handler import apply_default_values_to_new_nodes
+    from graphiti_extend.defaults.handler import apply_default_values_to_new_nodes
     
     # Create test nodes
     extracted_nodes = [

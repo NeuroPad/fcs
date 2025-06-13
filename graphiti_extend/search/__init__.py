@@ -14,41 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from .contradictions import (
-    ContradictionHandler,
-    ContradictionContext,
-    ContradictionDetectionResult,
-    ContradictionType,
-)
-from .defaults import apply_default_values_to_new_nodes, sanitize_node_attributes
-from .extended_graphiti import ExtendedGraphiti, ExtendedAddEpisodeResults
-from .salience import SalienceManager, SalienceScheduler
-from .search import (
+from .handler import (
     contradiction_aware_search,
     enhanced_contradiction_search,
     get_contradiction_edges,
 )
 
 __all__ = [
-    # Contradictions
-    'ContradictionHandler',
-    'ContradictionContext',
-    'ContradictionDetectionResult',
-    'ContradictionType',
-    
-    # Defaults
-    'apply_default_values_to_new_nodes',
-    'sanitize_node_attributes',
-    
-    # Extended Graphiti
-    'ExtendedGraphiti',
-    'ExtendedAddEpisodeResults',
-    
-    # Salience
-    'SalienceManager',
-    'SalienceScheduler',
-    
-    # Search
     'contradiction_aware_search',
     'enhanced_contradiction_search',
     'get_contradiction_edges',

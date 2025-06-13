@@ -20,7 +20,7 @@ from fastapi import FastAPI
 from fastapi_utilities import repeat_at
 from neo4j import AsyncGraphDatabase, AsyncDriver
 
-from .salience_manager import SalienceManager
+from .manager import SalienceManager
 
 logger = logging.getLogger(__name__)
 

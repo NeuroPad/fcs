@@ -24,7 +24,7 @@ from graphiti_core.nodes import EntityNode
 from graphiti_core.edges import EntityEdge
 from graphiti_core.utils.datetime_utils import utc_now
 
-from graphiti_extend.salience_manager import SalienceManager, SalienceConfig
+from graphiti_extend.salience.manager import SalienceManager, SalienceConfig
 
 
 class TestSalienceManager:
