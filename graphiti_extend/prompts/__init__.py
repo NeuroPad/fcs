@@ -15,5 +15,6 @@ limitations under the License.
 """
 
 from .lib import prompt_library
+from .contradiction import ContradictedNodes, get_contradiction_prompt
 
 __all__ = ['prompt_library'] 

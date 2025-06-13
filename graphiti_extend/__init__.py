@@ -14,42 +14,36 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from .contradictions import (
-    ContradictionHandler,
-    ContradictionContext,
+from .extended_graphiti import (
+    ExtendedGraphiti,
     ContradictionDetectionResult,
-    ContradictionType,
+    ExtendedAddEpisodeResults,
 )
-from .defaults import apply_default_values_to_new_nodes, sanitize_node_attributes
-from .extended_graphiti import ExtendedGraphiti, ExtendedAddEpisodeResults
-from .salience import SalienceManager, SalienceScheduler
-from .search import (
+from .contradictions.handler import detect_and_create_node_contradictions
+from .search.handler import (
     contradiction_aware_search,
     enhanced_contradiction_search,
-    get_contradiction_edges,
+)
+from .defaults.handler import apply_default_values_to_new_nodes
+from .salience.manager import (
+    SalienceManager,
+    SalienceConfig,
+)
+from .salience.scheduler import (
+    SalienceScheduler,
+    setup_salience_scheduler,
 )
 
 __all__ = [
-    # Contradictions
-    'ContradictionHandler',
-    'ContradictionContext',
-    'ContradictionDetectionResult',
-    'ContradictionType',
-    
-    # Defaults
-    'apply_default_values_to_new_nodes',
-    'sanitize_node_attributes',
-    
-    # Extended Graphiti
     'ExtendedGraphiti',
+    'ContradictionDetectionResult',
     'ExtendedAddEpisodeResults',
-    
-    # Salience
-    'SalienceManager',
-    'SalienceScheduler',
-    
-    # Search
     'contradiction_aware_search',
     'enhanced_contradiction_search',
-    'get_contradiction_edges',
+    'detect_and_create_node_contradictions',
+    'apply_default_values_to_new_nodes',
+    'SalienceManager',
+    'SalienceConfig',
+    'SalienceScheduler',
+    'setup_salience_scheduler',
 ] 

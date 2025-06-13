@@ -19,17 +19,15 @@ from typing import Any, Protocol, TypedDict
 from graphiti_core.prompts.models import Message, PromptFunction
 from graphiti_core.prompts.prompt_helpers import DO_NOT_ESCAPE_UNICODE
 
-from .invalidate_nodes import Prompt as InvalidateNodesPrompt
-from .invalidate_nodes import Versions as InvalidateNodesVersions
-from .invalidate_nodes import versions as invalidate_nodes_versions
+from .contradiction import ContradictedNodes, versions as contradiction_versions
 
 
 class ExtendedPromptLibrary(Protocol):
-    invalidate_nodes: InvalidateNodesPrompt
+    contradiction: dict
 
 
 class ExtendedPromptLibraryImpl(TypedDict):
-    invalidate_nodes: InvalidateNodesVersions
+    contradiction: dict
 
 
 class VersionWrapper:
@@ -56,7 +54,7 @@ class ExtendedPromptLibraryWrapper:
 
 
 EXTENDED_PROMPT_LIBRARY_IMPL: ExtendedPromptLibraryImpl = {
-    'invalidate_nodes': invalidate_nodes_versions,
+    'contradiction': contradiction_versions,
 }
 
 prompt_library: ExtendedPromptLibrary = ExtendedPromptLibraryWrapper(EXTENDED_PROMPT_LIBRARY_IMPL)  # type: ignore[assignment] 

@@ -24,7 +24,7 @@ from graphiti_extend.contradictions.handler import (
     create_contradiction_edges,
     detect_and_create_node_contradictions,
 )
-from graphiti_extend.prompts.invalidate_nodes import ContradictedNodes
+from graphiti_extend.prompts.contradiction import ContradictedNodes
 
 
 class TestNodeOperations:
