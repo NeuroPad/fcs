@@ -73,7 +73,7 @@ for node in result.nodes:
 
 ```python
 from fastapi import FastAPI
-from graphiti_extend import setup_salience_scheduler
+from graphiti_extend.salience.scheduler import setup_salience_scheduler
 
 app = FastAPI()
 
@@ -188,7 +188,7 @@ salience_manager = SalienceManager(driver, custom_config)
 ### Manual Decay Cycle
 
 ```python
-from graphiti_extend import SalienceManager
+from graphiti_extend.salience.manager import SalienceManager
 from neo4j import AsyncGraphDatabase
 
 driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
@@ -457,7 +457,7 @@ The test suite covers:
 
 #### Test Salience Updates
 ```python
-from graphiti_extend.salience_manager import SalienceManager, SalienceConfig
+from graphiti_extend.salience.manager import SalienceManager, SalienceConfig
 from graphiti_core.nodes import EntityNode
 
 # Create test node

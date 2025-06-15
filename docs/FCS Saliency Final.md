@@ -1,4 +1,3 @@
-
 # FCS Salience Mechanism: Brain-like Reinforcement System
 
 ## Overview
@@ -94,7 +93,7 @@ Where:
 ```
 
 ### Secondary Location: New Salience Manager Module
-**File**: `graphiti_extend/salience_manager.py` (new module)
+**File**: `graphiti_extend/salience/manager.py` (new module)
 
 Functions:
 - `update_direct_salience()` - Handle direct activation

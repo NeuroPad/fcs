@@ -97,7 +97,7 @@ This logging demonstrates:
 ## Configuration
 
 The logging is controlled by print statements in:
-- `graphiti_extend/salience_manager.py` - Main salience update methods
+- `graphiti_extend/salience/manager.py` - Main salience update methods
 - All updates show complete node states and calculation details
 
 To copy the output for your client, simply run the demo and copy the console output. The formatting is designed to be readable and comprehensive. 

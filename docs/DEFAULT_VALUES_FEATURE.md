@@ -148,7 +148,7 @@ This feature integrates seamlessly with existing `ExtendedGraphiti` functionalit
 ### Files Modified/Added
 
 1. **`fcs_core/models.py`**: Updated `CognitiveObject` with default values
-2. **`graphiti_extend/default_values_handler.py`**: New module for default value logic
+2. **`graphiti_extend/defaults/handler.py`**: New module for default value logic
 3. **`graphiti_extend/extended_graphiti.py`**: Integrated default application into episode processing
 4. **`graphiti_extend/__init__.py`**: Exported new functionality
 
