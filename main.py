@@ -8,6 +8,7 @@ from core.config import settings
 
 import logging
 from pathlib import Path
+import os
 
 
 from fcs_core import FCSMemoryService
@@ -51,6 +52,9 @@ async def startup_event():
     await memory_service.initialize()
     logger.info("Initialized FCSMemoryService on startup")
     logger.info("Initialized DocumentService worker on startup")
+
+    # Debug print for NEO4J-related environment variables
+    print("DOCKER ENV DEBUG:", {k: v for k, v in os.environ.items() if "NEO4J" in k})
 
 @app.on_event("shutdown")
 async def shutdown_event():

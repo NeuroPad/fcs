@@ -15,7 +15,7 @@ from services.llama_index_graph_rag import GraphRAGService
 
 router = APIRouter()
 
-graph_rag_service = GraphRAGService()
+# graph_rag_service = GraphRAGService()
 
 
 # Create directories if they don't exist
@@ -30,30 +30,30 @@ pdf_service = FileService(
 logger = logging.getLogger(__name__)
 
 
-@router.post("/upload/", deprecated=True)
-async def upload_file(
-        file: UploadFile = File(...), page_range: str = Form(default='{"all_pages": true}')
-):
-    """
-     **Deprecated**: This endpoint is deprecated and will be removed in future versions.
-    Please use the `/upload-files` endpoint instead.
+# @router.post("/upload/", deprecated=True)
+# async def upload_file(
+#         file: UploadFile = File(...), page_range: str = Form(default='{"all_pages": true}')
+# ):
+#     """
+#      **Deprecated**: This endpoint is deprecated and will be removed in future versions.
+#     Please use the `/upload-files` endpoint instead.
 
-    Upload a PDF or TXT file to create a knowledge graph.
-    Specify page range for PDF files:
-    - all_pages=true for all pages
-    - start and end for specific range
-    """
-    try:
-        page_range_dict = json.loads(page_range)
-        file_upload = FileUpload(page_range=PageRange(**page_range_dict))
-        content = await process_file_upload(file, file_upload.page_range)
-        await graph_rag_service.process_document(content)
-        return {
-            "message": "File processed successfully",
-            "pages_processed": file_upload.page_range,
-        }
-    except Exception as e:
-        raise HTTPException(500, str(e))
+#     Upload a PDF or TXT file to create a knowledge graph.
+#     Specify page range for PDF files:
+#     - all_pages=true for all pages
+#     - start and end for specific range
+#     """
+#     try:
+#         page_range_dict = json.loads(page_range)
+#         file_upload = FileUpload(page_range=PageRange(**page_range_dict))
+#         content = await process_file_upload(file, file_upload.page_range)
+#         await graph_rag_service.process_document(content)
+#         return {
+#             "message": "File processed successfully",
+#             "pages_processed": file_upload.page_range,
+#         }
+#     except Exception as e:
+#         raise HTTPException(500, str(e))
 
 
 @router.post("/upload-files")

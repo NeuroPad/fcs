@@ -71,13 +71,13 @@ RUN if [ ! -d "/app/models/bge-small-en-v1.5" ]; then \
 #     fi
 
 # Install CLIP using Poetry with retry mechanism
-RUN poetry run python -c "import clip" || \
-    for i in 1 2 3; do \
-        poetry add git+https://github.com/openai/CLIP.git && \
-        break || \
-        echo "Retry installing CLIP: $i" && \
-        sleep 10; \
-    done
+# RUN poetry run python -c "import clip" || \
+#     for i in 1 2 3; do \
+#         poetry add git+https://github.com/openai/CLIP.git && \
+#         break || \
+#         echo "Retry installing CLIP: $i" && \
+#         sleep 10; \
+#     done
 
 # Expose the port the app runs on
 EXPOSE 8000
