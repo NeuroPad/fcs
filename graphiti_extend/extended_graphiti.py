@@ -33,10 +33,11 @@ from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search_config import SearchConfig, SearchResults
 from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_CROSS_ENCODER
 from graphiti_core.search.search_filters import SearchFilters
-from graphiti_core.search.search_utils import get_relevant_nodes
+from graphiti_core.search.search_utils import get_relevant_nodes, RELEVANT_SCHEMA_LIMIT
 from graphiti_core.utils.bulk_utils import add_nodes_and_edges_bulk
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.edge_operations import (
+    build_duplicate_of_edges,
     build_episodic_edges,
     extract_edges,
     resolve_extracted_edges,
@@ -201,7 +202,7 @@ class ExtendedGraphiti(Graphiti):
             previous_episodes = (
                 await self.retrieve_episodes(
                     reference_time,
-                    last_n=EPISODE_WINDOW_LEN,
+                    last_n=RELEVANT_SCHEMA_LIMIT,
                     group_ids=[group_id],
                     source=source,
                 )
@@ -237,7 +238,7 @@ class ExtendedGraphiti(Graphiti):
             )
 
             # Extract edges and resolve nodes
-            (nodes, uuid_map), extracted_edges = await semaphore_gather(
+            (nodes, uuid_map, node_duplicates), extracted_edges = await semaphore_gather(
                 resolve_extracted_nodes(
                     self.clients,
                     extracted_nodes,
@@ -246,7 +247,13 @@ class ExtendedGraphiti(Graphiti):
                     entity_types,
                 ),
                 extract_edges(
-                    self.clients, episode, extracted_nodes, previous_episodes, group_id, edge_types
+                    self.clients,
+                    episode,
+                    extracted_nodes,
+                    previous_episodes,
+                    edge_type_map or edge_type_map_default,
+                    group_id,
+                    edge_types,
                 ),
             )
 
@@ -259,10 +266,13 @@ class ExtendedGraphiti(Graphiti):
             # Apply salience updates for duplicate detection
             duplicate_nodes = []
             duplicate_node_uuids = set()
+            new_node_uuids = set()  # Track newly created nodes
             for extracted, resolved in zip(extracted_nodes, nodes):
                 if extracted.uuid != resolved.uuid:  # Was a duplicate
                     duplicate_nodes.append(resolved)
                     duplicate_node_uuids.add(resolved.uuid)
+                else:  # Was a new node
+                    new_node_uuids.add(resolved.uuid)
             
             if duplicate_nodes:
                 await self.salience_manager.update_direct_salience(
@@ -287,17 +297,24 @@ class ExtendedGraphiti(Graphiti):
                     self.clients, nodes, episode, previous_episodes, entity_types
                 ),
             )
-
+          
             # Apply network reinforcement for duplicate nodes only
             if duplicate_nodes:
                 await self.salience_manager.propagate_network_reinforcement(
                     duplicate_nodes, [group_id] if group_id else None
                 )
             
-            # Apply structural boosts to all nodes
-            hydrated_nodes = await self.salience_manager.apply_structural_boosts(hydrated_nodes)
+            # Apply structural boosts to existing nodes only (not new nodes)
+            existing_nodes_for_structural_boosts = [
+                node for node in hydrated_nodes 
+                if node.uuid not in new_node_uuids
+            ]
+            if existing_nodes_for_structural_boosts:
+                hydrated_nodes = await self.salience_manager.apply_structural_boosts(existing_nodes_for_structural_boosts)
 
-            entity_edges = resolved_edges + invalidated_edges
+            duplicate_of_edges = build_duplicate_of_edges(episode, now, node_duplicates)
+
+            entity_edges = resolved_edges + invalidated_edges + duplicate_of_edges
 
             # Create contradiction edges from edge invalidation if enabled
             invalidation_contradiction_edges = []
@@ -316,14 +333,14 @@ class ExtendedGraphiti(Graphiti):
             )
 
             if self.enable_contradiction_detection and hydrated_nodes:
-                # Apply salience for reasoning usage (only to nodes that haven't already been updated)
-                nodes_for_reasoning = [
+                # Apply salience for reasoning usage (only to existing nodes that are NOT new or duplicates)
+                existing_nodes_for_reasoning = [
                     node for node in hydrated_nodes 
-                    if node.uuid not in duplicate_node_uuids
+                    if node.uuid not in new_node_uuids and node.uuid not in duplicate_node_uuids
                 ]
-                if nodes_for_reasoning:
+                if existing_nodes_for_reasoning:
                     await self.salience_manager.update_direct_salience(
-                        nodes_for_reasoning, 'reasoning_usage', reference_time
+                        existing_nodes_for_reasoning, 'reasoning_usage', reference_time
                     )
                 
                 contradiction_edges_list = await self._detect_contradictions_for_nodes(
@@ -339,7 +356,7 @@ class ExtendedGraphiti(Graphiti):
                     # Add contradiction edges to entity edges
                     entity_edges.extend(all_contradiction_edges)
                     
-                    # Apply salience for contradiction involvement
+                    # Apply salience for contradiction involvement (only to existing nodes)
                     contradicting_node_uuids = set()
                     contradicted_node_uuids = set()
                     
@@ -348,12 +365,14 @@ class ExtendedGraphiti(Graphiti):
                         contradicted_node_uuids.add(edge.target_node_uuid)
                     
                     # Find the actual node objects and apply salience updates
-                    # (only to nodes that haven't already received duplicate_found updates)
+                    # (only to existing nodes that haven't already received duplicate_found updates)
                     node_uuid_map = {node.uuid: node for node in hydrated_nodes}
                     contradiction_nodes = []
                     
                     for uuid in contradicting_node_uuids.union(contradicted_node_uuids):
-                        if uuid in node_uuid_map and uuid not in duplicate_node_uuids:
+                        if (uuid in node_uuid_map and 
+                            uuid not in duplicate_node_uuids and 
+                            uuid not in new_node_uuids):  # Only existing nodes
                             contradiction_nodes.append(node_uuid_map[uuid])
                     
                     if contradiction_nodes:
@@ -397,13 +416,14 @@ class ExtendedGraphiti(Graphiti):
                     )
 
             # Build episodic edges
-            episodic_edges = build_episodic_edges(hydrated_nodes, episode, now)
+            episodic_edges = build_episodic_edges(nodes, episode, now)
 
             episode.entity_edges = [edge.uuid for edge in entity_edges]
 
             if not self.store_raw_episode_content:
                 episode.content = ''
 
+ 
             # Save everything to the database
             await add_nodes_and_edges_bulk(
                 self.driver, [episode], episodic_edges, hydrated_nodes, entity_edges, self.embedder
@@ -423,7 +443,7 @@ class ExtendedGraphiti(Graphiti):
 
             return ExtendedAddEpisodeResults(
                 episode=episode,
-                nodes=hydrated_nodes,
+                nodes=nodes,
                 edges=entity_edges,
                 contradiction_result=contradiction_result,
             )
@@ -431,6 +451,7 @@ class ExtendedGraphiti(Graphiti):
         except Exception as e:
             logger.error(f'Error in add_episode_with_contradictions: {str(e)}')
             raise e
+
 
     async def _detect_contradictions_for_nodes(
         self,
