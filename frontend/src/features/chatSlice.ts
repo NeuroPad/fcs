@@ -69,6 +69,7 @@ export const createChat = createAsyncThunk(
       return {
         messages: sessionResponse.data.messages,
         chatId: sessionId,
+        sessionId: sessionId,
       };
     } catch (error: any) {
       throw error.response?.data?.detail || 'An error occurred';

@@ -21,19 +21,38 @@ import './Chat.css';
 import { color } from 'html2canvas/dist/types/css/types/color';
 import Header from '../../components/Header/Header';
 import { IonChip, IonLabel } from '@ionic/react';
+import { useParams, useHistory } from 'react-router-dom';
 
 // Add QueryMode type
 type QueryMode = 'normal' | 'graph' | 'combined';
 
 const Chat: React.FC = () => {
   const dispatch = useAppDispatch();
+  const history = useHistory();
   const { selectedChat, chatId } = useAppSelector((state) => state.chat);
   const bottomRef = React.useRef<HTMLDivElement>(null);
+
+  // Get sessionId from URL if present
+  const { sessionId } = useParams<{ sessionId?: string }>();
 
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   // Changed default mode to 'graph' instead of 'normal'
   const [queryMode, setQueryMode] = useState<QueryMode>('normal');
+
+  // Fetch chat by sessionId on mount or when sessionId changes
+  useEffect(() => {
+    if (sessionId) {
+      dispatch(getChatById(Number(sessionId)));
+    }
+  }, [dispatch, sessionId]);
+
+  // Navigate to new chat route when a new chat is created
+  useEffect(() => {
+    if (chatId && !sessionId) {
+      history.push(`/chat/session/${chatId}`);
+    }
+  }, [chatId, sessionId, history]);
 
   useEffect(() => {
     if (bottomRef.current) {
@@ -165,14 +184,14 @@ const Chat: React.FC = () => {
                 placeholder="What's on your mind ?..."
                 className="chat-input"
               />
+              <IonButton 
+                className="send-button" 
+                onClick={sendNewMessage} 
+                disabled={isTyping}
+              >
+                {isTyping ? <IonSpinner name="dots" /> : <IonIcon  icon={sendOutline} />}
+              </IonButton>
             </div>
-            <IonButton 
-              className="send-button" 
-              onClick={sendNewMessage} 
-              disabled={isTyping}
-            >
-              {isTyping ? <IonSpinner name="dots" /> : <IonIcon  icon={sendOutline} />}
-            </IonButton>
           </div>
         </div>
       </div>

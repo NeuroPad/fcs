@@ -23,7 +23,6 @@ import KnowledgeBaseManagement from '../../pages/KnowledgeBaseManagement/Knowled
 import UserManagement from '../../pages/UserManagement/UserManagement';
 import UserActivityLogs from '../../pages/UserActivityLogs/UserActivityLogs';
 
-import { getUserChats } from '../../features/chatSlice';
 import EditProfile from '../../pages/Profile/EditProfile/EditProfile';
 import ChangePassword from '../../pages/Profile/ChangePassword/ChangePassword';
 import Chat from '../../pages/Chat/Chat';
@@ -31,11 +30,6 @@ import Chat from '../../pages/Chat/Chat';
 export default function Root() {
   const dispatch = useAppDispatch();
   const location = useLocation();
-  const isChatRoute = location.pathname === '/chat';
-
-  useEffect(() => {
-    dispatch(getUserChats());
-  }, [dispatch]);
 
   return (
     <IonSplitPane contentId='main2'>
@@ -62,7 +56,8 @@ export default function Root() {
 
           <Route path='/knowledgebase' render={() => <KnowledgeBaseManagement />} />
           <Route path='/users' render={() => <UserManagement />} />
-          <Route path='/chat' render={() => <Chat />} />
+          <Route path='/chat' exact render={() => <Chat />} />
+          <Route path='/chat/session/:sessionId' render={() => <Chat />} />
           
           <Route exact path='/user-logs/:userId' render={(props) => <UserActivityLogs {...props} />} />
         </Switch>

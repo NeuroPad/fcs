@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   IonContent,
   IonHeader,
@@ -14,11 +14,11 @@ import {
   IonPopover
 } from '@ionic/react';
 import { addOutline } from 'ionicons/icons';
-import { useLocation } from 'react-router';
+import { useLocation, useHistory } from 'react-router';
 import { libraryOutline, documentOutline, settingsOutline, medkitOutline } from 'ionicons/icons';
 import { useAppDispatch, useAppSelector } from '../../app/hooks';
 import { logout } from '../../features/authSlice';
-import { getChatById, setMessages } from '../../features/chatSlice';
+import { getChatById, setMessages, getUserChats } from '../../features/chatSlice';
 import './Drawer.css';
 import { chatbubbleOutline, chatboxEllipses } from 'ionicons/icons';
 import { color } from 'html2canvas/dist/types/css/types/color';
@@ -30,10 +30,18 @@ import { deleteChat } from '../../features/chatSlice';
 
 export default function Drawer() {
   const location = useLocation();
+  const history = useHistory();
   const dispatch = useAppDispatch();
 
   const { chats, chatId } = useAppSelector((state) => state.chat);
-  const isChatRoute = location.pathname === '/chat';
+  const isChatRoute = location.pathname.startsWith('/chat');
+
+  // Refresh chat list when component mounts or when on chat route
+  useEffect(() => {
+    if (isChatRoute) {
+      dispatch(getUserChats());
+    }
+  }, [dispatch, isChatRoute]);
 
 
   // Regular navigation items
@@ -97,12 +105,19 @@ export default function Drawer() {
 
   const handleNewChat = () => {
     dispatch(setMessages([]));
+    history.push('/chat');
   };
 
   // Add handler for delete
   const handleDelete = async (chatId: number) => {
     await dispatch(deleteChat(chatId));
     setPopoverState({ showPopover: false, event: undefined, chatId: undefined });
+    // Refresh chat list after deletion
+    dispatch(getUserChats());
+  };
+
+  const handleChatClick = (chat: any) => {
+    history.push(`/chat/session/${chat.id}`);
   };
 
   return (
@@ -138,7 +153,7 @@ export default function Drawer() {
                   <IonItem
                     button
                     detail={false}
-                    onClick={() => dispatch(getChatById(chat.id))}
+                    onClick={() => handleChatClick(chat)}
                     className={chatId === chat.id ? 'selected' : ''}
                   >
                     <IonIcon
