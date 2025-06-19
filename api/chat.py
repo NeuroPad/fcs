@@ -50,11 +50,17 @@ async def create_new_chat(
 
 
 @router.get("/sessions")
-async def get_all_chat_sessions(db: Session = Depends(get_db)):
+async def get_all_chat_sessions(request: Request, db: Session = Depends(get_db)):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    token = auth_header.split(" ")[1]
+    user, error = get_user_from_token(db, token)
+    if error:
+        raise HTTPException(status_code=401 if error == "Invalid token" else 404, detail=error)
     chat_service = ChatService(db)
-    sessions = chat_service.get_all_chat_sessions()
-    print(sessions)
-    return [{"id": s.id, "created_at": s.created_at} for s in sessions]
+    sessions = chat_service.get_user_chat_sessions(user.id)
+    return [{"id": s.id, "created_at": s.created_at, "title": s.title} for s in sessions]
 
 
 @router.get("/session/{session_id}", response_model=ChatSessionResponse)

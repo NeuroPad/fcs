@@ -22,6 +22,9 @@ class ChatService:
     def get_all_chat_sessions(self):
         return self.db_session.query(ChatSession).all()
 
+    def get_user_chat_sessions(self, user_id: int):
+        return self.db_session.query(ChatSession).filter(ChatSession.user_id == user_id).all()
+
     def add_message_to_session(
         self, session_id: int, role: str, content: str, image_path: str = None
     ):
