@@ -139,6 +139,9 @@ class ExtendedGraphiti(Graphiti):
         
         # Initialize salience manager
         self.salience_manager = SalienceManager(self.driver)
+        
+        # Track all created node UUIDs across episodes to prevent salience increases for new nodes
+        self.created_node_uuids: set[str] = set()
 
     async def add_episode_with_contradictions(
         self,
@@ -266,17 +269,30 @@ class ExtendedGraphiti(Graphiti):
             # Apply salience updates for duplicate detection
             duplicate_nodes = []
             duplicate_node_uuids = set()
-            new_node_uuids = set()  # Track newly created nodes
+            truly_new_node_uuids = set()  # Track truly new nodes (not seen before)
+            episode_created_node_uuids = set()  # Track nodes created in this episode
+            
             for extracted, resolved in zip(extracted_nodes, nodes):
                 if extracted.uuid != resolved.uuid:  # Was a duplicate
                     duplicate_nodes.append(resolved)
                     duplicate_node_uuids.add(resolved.uuid)
                 else:  # Was a new node
-                    new_node_uuids.add(resolved.uuid)
+                    truly_new_node_uuids.add(resolved.uuid)
+                    episode_created_node_uuids.add(resolved.uuid)
             
-            if duplicate_nodes:
+            # Add truly new nodes to the global tracking set
+            self.created_node_uuids.update(truly_new_node_uuids)
+            
+            # Only apply duplicate_found salience to nodes that were created in previous episodes
+            # (not nodes that were created earlier in this same episode)
+            existing_duplicate_nodes = [
+                node for node in duplicate_nodes 
+                if node.uuid in self.created_node_uuids and node.uuid not in episode_created_node_uuids
+            ]
+            
+            if existing_duplicate_nodes:
                 await self.salience_manager.update_direct_salience(
-                    duplicate_nodes, 'duplicate_found', reference_time
+                    existing_duplicate_nodes, 'duplicate_found', reference_time
                 )
 
             # Resolve edge pointers
@@ -299,15 +315,15 @@ class ExtendedGraphiti(Graphiti):
             )
           
             # Apply network reinforcement for duplicate nodes only
-            if duplicate_nodes:
+            if existing_duplicate_nodes:
                 await self.salience_manager.propagate_network_reinforcement(
-                    duplicate_nodes, [group_id] if group_id else None
+                    existing_duplicate_nodes, [group_id] if group_id else None
                 )
             
             # Apply structural boosts to existing nodes only (not new nodes)
             existing_nodes_for_structural_boosts = [
                 node for node in hydrated_nodes 
-                if node.uuid not in new_node_uuids
+                if node.uuid not in truly_new_node_uuids
             ]
             if existing_nodes_for_structural_boosts:
                 hydrated_nodes = await self.salience_manager.apply_structural_boosts(existing_nodes_for_structural_boosts)
@@ -336,7 +352,7 @@ class ExtendedGraphiti(Graphiti):
                 # Apply salience for reasoning usage (only to existing nodes that are NOT new or duplicates)
                 existing_nodes_for_reasoning = [
                     node for node in hydrated_nodes 
-                    if node.uuid not in new_node_uuids and node.uuid not in duplicate_node_uuids
+                    if node.uuid not in truly_new_node_uuids
                 ]
                 if existing_nodes_for_reasoning:
                     await self.salience_manager.update_direct_salience(
@@ -372,7 +388,7 @@ class ExtendedGraphiti(Graphiti):
                     for uuid in contradicting_node_uuids.union(contradicted_node_uuids):
                         if (uuid in node_uuid_map and 
                             uuid not in duplicate_node_uuids and 
-                            uuid not in new_node_uuids):  # Only existing nodes
+                            uuid not in truly_new_node_uuids):  # Only existing nodes
                             contradiction_nodes.append(node_uuid_map[uuid])
                     
                     if contradiction_nodes:

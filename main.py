@@ -54,7 +54,7 @@ async def startup_event():
     logger.info("Initialized DocumentService worker on startup")
 
     # Debug print for NEO4J-related environment variables
-    print("DOCKER ENV DEBUG:", {k: v for k, v in os.environ.items() if "NEO4J" in k})
+    # print("DOCKER ENV DEBUG:", {k: v for k, v in os.environ.items() if "NEO4J" in k})
 
 @app.on_event("shutdown")
 async def shutdown_event():
