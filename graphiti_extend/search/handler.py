@@ -87,7 +87,7 @@ async def get_contradiction_edges(
 
     records, _, _ = await driver.execute_query(
         query,
-        query_params,
+        params=query_params,
         limit=limit,
         database_=DEFAULT_DATABASE,
         routing_='r',
@@ -153,7 +153,7 @@ async def get_contradicted_nodes(
 
     records, _, _ = await driver.execute_query(
         query,
-        query_params,
+        params=query_params,
         database_=DEFAULT_DATABASE,
         routing_='r',
     )
@@ -226,7 +226,7 @@ async def get_contradicting_nodes(
 
     records, _, _ = await driver.execute_query(
         query,
-        query_params,
+        params=query_params,
         database_=DEFAULT_DATABASE,
         routing_='r',
     )

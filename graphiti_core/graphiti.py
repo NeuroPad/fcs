@@ -19,12 +19,13 @@ from datetime import datetime
 from time import time
 
 from dotenv import load_dotenv
-from neo4j import AsyncGraphDatabase
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
@@ -62,6 +63,7 @@ from graphiti_core.utils.maintenance.community_operations import (
     update_community,
 )
 from graphiti_core.utils.maintenance.edge_operations import (
+    build_duplicate_of_edges,
     build_episodic_edges,
     extract_edges,
     resolve_extracted_edge,
@@ -94,12 +96,13 @@ class Graphiti:
     def __init__(
         self,
         uri: str,
-        user: str,
-        password: str,
+        user: str | None = None,
+        password: str | None = None,
         llm_client: LLMClient | None = None,
         embedder: EmbedderClient | None = None,
         cross_encoder: CrossEncoderClient | None = None,
         store_raw_episode_content: bool = True,
+        graph_driver: GraphDriver | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -137,7 +140,9 @@ class Graphiti:
         Make sure to set the OPENAI_API_KEY environment variable before initializing
         Graphiti if you're using the default OpenAIClient.
         """
-        self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+
+        self.driver = graph_driver if graph_driver else Neo4jDriver(uri, user, password)
+
         self.database = DEFAULT_DATABASE
         self.store_raw_episode_content = store_raw_episode_content
         if llm_client:
@@ -371,7 +376,7 @@ class Graphiti:
             )
 
             # Extract edges and resolve nodes
-            (nodes, uuid_map), extracted_edges = await semaphore_gather(
+            (nodes, uuid_map, node_duplicates), extracted_edges = await semaphore_gather(
                 resolve_extracted_nodes(
                     self.clients,
                     extracted_nodes,
@@ -380,7 +385,13 @@ class Graphiti:
                     entity_types,
                 ),
                 extract_edges(
-                    self.clients, episode, extracted_nodes, previous_episodes, group_id, edge_types
+                    self.clients,
+                    episode,
+                    extracted_nodes,
+                    previous_episodes,
+                    edge_type_map or edge_type_map_default,
+                    group_id,
+                    edge_types,
                 ),
             )
 
@@ -400,7 +411,9 @@ class Graphiti:
                 ),
             )
 
-            entity_edges = resolved_edges + invalidated_edges
+            duplicate_of_edges = build_duplicate_of_edges(episode, now, node_duplicates)
+
+            entity_edges = resolved_edges + invalidated_edges + duplicate_of_edges
 
             episodic_edges = build_episodic_edges(nodes, episode, now)
 
@@ -687,7 +700,7 @@ class Graphiti:
         if edge.fact_embedding is None:
             await edge.generate_embedding(self.embedder)
 
-        resolved_nodes, uuid_map = await resolve_extracted_nodes(
+        resolved_nodes, uuid_map, _ = await resolve_extracted_nodes(
             self.clients,
             [source_node, target_node],
         )

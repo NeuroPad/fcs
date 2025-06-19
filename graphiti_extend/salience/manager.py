@@ -512,8 +512,7 @@ class SalienceManager:
         
         records, _, _ = await self.driver.execute_query(
             query,
-            node_uuid=node_uuid,
-            group_ids=group_ids,
+            params={"node_uuid": node_uuid, "group_ids": group_ids},
             database_=DEFAULT_DATABASE,
             routing_='r'
         )
@@ -546,7 +545,7 @@ class SalienceManager:
         
         node_records, _, _ = await self.driver.execute_query(
             get_nodes_query,
-            uuids=list(reinforcement_map.keys()),
+            params={"uuids": list(reinforcement_map.keys())},
             database_=DEFAULT_DATABASE,
             routing_='r'
         )
@@ -595,7 +594,7 @@ class SalienceManager:
         
         updated_records, _, _ = await self.driver.execute_query(
             query,
-            updates=updates,
+            params={"updates": updates},
             database_=DEFAULT_DATABASE
         )
         
@@ -641,8 +640,7 @@ class SalienceManager:
         
         records, _, _ = await self.driver.execute_query(
             query,
-            node_uuid=node_uuid,
-            threshold=self.config.HIGH_CONFIDENCE_THRESHOLD,
+            params={"node_uuid": node_uuid, "threshold": self.config.HIGH_CONFIDENCE_THRESHOLD},
             database_=DEFAULT_DATABASE,
             routing_='r'
         )
@@ -659,7 +657,7 @@ class SalienceManager:
         
         records, _, _ = await self.driver.execute_query(
             query,
-            node_uuid=node_uuid,
+            params={"node_uuid": node_uuid},
             database_=DEFAULT_DATABASE,
             routing_='r'
         )
@@ -690,9 +688,7 @@ class SalienceManager:
         
         records, _, _ = await self.driver.execute_query(
             query,
-            group_ids=group_ids,
-            offset=offset,
-            batch_size=batch_size,
+            params={"group_ids": group_ids, "offset": offset, "batch_size": batch_size},
             database_=DEFAULT_DATABASE,
             routing_='r'
         )
@@ -850,7 +846,7 @@ class SalienceManager:
         
         await self.driver.execute_query(
             query,
-            updates=updates,
+            params={"updates": updates},
             database_=DEFAULT_DATABASE
         )
     
@@ -866,7 +862,7 @@ class SalienceManager:
         
         await self.driver.execute_query(
             query,
-            uuids=node_uuids,
+            params={"uuids": node_uuids},
             database_=DEFAULT_DATABASE
         )
         
@@ -882,7 +878,7 @@ class SalienceManager:
         
         records, _, _ = await self.driver.execute_query(
             query,
-            uuid=uuid,
+            params={"uuid": uuid},
             database_=DEFAULT_DATABASE,
             routing_='r'
         )

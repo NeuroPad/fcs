@@ -140,6 +140,7 @@ async def search_memory(user_id: str, query: SearchQuery, service: FCSMemoryServ
         count=result["count"]
     )
 
+
 @router.post("/cognitive-objects/{user_id}", response_model=OperationResponse, status_code=status.HTTP_201_CREATED)
 async def add_cognitive_object(user_id: str, cognitive_object: CognitiveObjectCreate, 
                               service: FCSMemoryService = Depends(get_memory_service)):

@@ -16,7 +16,7 @@ router = APIRouter()
 
 # Include all sub-routers
 router.include_router(files_router, prefix="/files", tags=["files"])
-# router.include_router(graph_rag_router, prefix="/graph-rag", tags=["graph-rag"])
+router.include_router(graph_rag_router, prefix="/graph-rag", tags=["graph-rag"])
 router.include_router(chat_router, prefix="/chat", tags=["chat"])
 router.include_router(langchain_router, prefix="/langchain", tags=["langchain"])
 router.include_router(memory_router, prefix="/memory", tags=["memory"])
