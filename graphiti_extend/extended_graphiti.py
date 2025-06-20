@@ -17,7 +17,7 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
-from typing import Any
+from typing import Any, Optional, Dict
 import json
 
 from pydantic import BaseModel
@@ -54,9 +54,11 @@ from graphiti_core.utils.maintenance.node_operations import (
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
 
 from .contradictions.handler import detect_and_create_node_contradictions
-from .search.handler import contradiction_aware_search, enhanced_contradiction_search
+from .search.handler import contradiction_aware_search as _contradiction_aware_search, enhanced_contradiction_search as _enhanced_contradiction_search
 from .defaults.handler import apply_default_values_to_new_nodes, sanitize_node_attributes
 from .salience.manager import SalienceManager
+from .confidence.manager import ConfidenceManager
+from .confidence.models import ConfidenceTrigger, OriginType
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +141,9 @@ class ExtendedGraphiti(Graphiti):
         
         # Initialize salience manager
         self.salience_manager = SalienceManager(self.driver)
+        
+        # Initialize confidence manager
+        self.confidence_manager = ConfidenceManager(self.driver)
         
         # Track all created node UUIDs across episodes to prevent salience increases for new nodes
         self.created_node_uuids: set[str] = set()
@@ -295,6 +300,30 @@ class ExtendedGraphiti(Graphiti):
                     existing_duplicate_nodes, 'duplicate_found', reference_time
                 )
 
+            # Assign initial confidence to all nodes
+            confidence_updates = []
+            for extracted, resolved in zip(extracted_nodes, nodes):
+                is_duplicate = extracted.uuid != resolved.uuid
+                origin_type = await self.confidence_manager.detect_origin_type(
+                    resolved, episode_body, is_duplicate
+                )
+                await self.confidence_manager.assign_initial_confidence(
+                    resolved, origin_type, is_duplicate
+                )
+                
+                # Apply user reaffirmation boost for existing duplicates
+                if is_duplicate and resolved.uuid in self.created_node_uuids:
+                    confidence_updates.append((
+                        resolved.uuid,
+                        ConfidenceTrigger.USER_REAFFIRMATION,
+                        "User reaffirmed existing entity",
+                        {"episode_uuid": episode.uuid}
+                    ))
+            
+            # Apply confidence updates in batch
+            if confidence_updates:
+                await self.confidence_manager.update_confidence_batch(confidence_updates)
+
             # Resolve edge pointers
             from graphiti_core.utils.bulk_utils import resolve_edge_pointers
             edges = resolve_edge_pointers(extracted_edges, uuid_map)
@@ -319,6 +348,30 @@ class ExtendedGraphiti(Graphiti):
                 await self.salience_manager.propagate_network_reinforcement(
                     existing_duplicate_nodes, [group_id] if group_id else None
                 )
+                
+                # Apply confidence network reinforcement for existing duplicate nodes
+                network_confidence_updates = []
+                for node in existing_duplicate_nodes:
+                    # Get connected nodes for network reinforcement calculation
+                    connected_nodes = await self._get_connected_nodes(node.uuid)
+                    if connected_nodes:
+                        network_boost = await self.confidence_manager.calculate_network_reinforcement(
+                            node.uuid, connected_nodes
+                        )
+                        if network_boost > 0:
+                            network_confidence_updates.append((
+                                node.uuid,
+                                ConfidenceTrigger.NETWORK_SUPPORT,
+                                f"Network reinforcement from {len(connected_nodes)} connected nodes",
+                                {
+                                    "network_boost": network_boost,
+                                    "connected_node_count": len(connected_nodes)
+                                }
+                            ))
+                
+                # Apply network confidence updates in batch
+                if network_confidence_updates:
+                    await self.confidence_manager.update_confidence_batch(network_confidence_updates)
             
             # Apply structural boosts to existing nodes only (not new nodes)
             existing_nodes_for_structural_boosts = [
@@ -395,6 +448,46 @@ class ExtendedGraphiti(Graphiti):
                         await self.salience_manager.update_direct_salience(
                             contradiction_nodes, 'contradiction_involvement', reference_time
                         )
+                    
+                    # Apply confidence penalties for contradicted nodes and boosts for contradicting nodes
+                    contradiction_confidence_updates = []
+                    for edge in all_contradiction_edges:
+                        # Apply penalty to contradicted node
+                        contradicted_confidence = await self.confidence_manager.get_confidence(edge.target_node_uuid)
+                        contradicting_confidence = await self.confidence_manager.get_confidence(edge.source_node_uuid)
+                        
+                        if contradicted_confidence is not None and contradicting_confidence is not None:
+                            # Calculate contradiction strength based on confidence difference
+                            confidence_diff = contradicting_confidence - contradicted_confidence
+                            contradiction_strength = max(0.5, min(1.0, 0.5 + abs(confidence_diff)))
+                            
+                            # Apply penalty to contradicted node
+                            contradiction_confidence_updates.append((
+                                edge.target_node_uuid,
+                                ConfidenceTrigger.CONTRADICTION_DETECTED,
+                                f"Contradicted by {edge.source_node_uuid}",
+                                {
+                                    "contradicting_node_uuid": edge.source_node_uuid,
+                                    "contradiction_strength": contradiction_strength,
+                                    "confidence_difference": confidence_diff
+                                }
+                            ))
+                            
+                            # Apply boost to contradicting node (if it has higher confidence)
+                            if contradicting_confidence > contradicted_confidence:
+                                contradiction_confidence_updates.append((
+                                    edge.source_node_uuid,
+                                    ConfidenceTrigger.NETWORK_SUPPORT,
+                                    f"Successfully contradicted {edge.target_node_uuid}",
+                                    {
+                                        "contradicted_node_uuid": edge.target_node_uuid,
+                                        "contradiction_strength": contradiction_strength
+                                    }
+                                ))
+                    
+                    # Apply contradiction confidence updates in batch
+                    if contradiction_confidence_updates:
+                        await self.confidence_manager.update_confidence_batch(contradiction_confidence_updates)
                 else:
                     all_contradiction_edges = []
                 
@@ -454,6 +547,9 @@ class ExtendedGraphiti(Graphiti):
                     ]
                 )
 
+            # Apply confidence decay for dormant nodes
+            await self._apply_confidence_decay(group_id)
+
             end = time()
             logger.info(f'Completed add_episode_with_contradictions in {(end - start) * 1000} ms')
 
@@ -467,7 +563,6 @@ class ExtendedGraphiti(Graphiti):
         except Exception as e:
             logger.error(f'Error in add_episode_with_contradictions: {str(e)}')
             raise e
-
 
     async def _detect_contradictions_for_nodes(
         self,
@@ -808,7 +903,7 @@ class ExtendedGraphiti(Graphiti):
         SearchResults
             Enhanced search results with contradiction information.
         """
-        return await contradiction_aware_search(
+        return await _contradiction_aware_search(
             self.clients,
             query,
             config,
@@ -818,6 +913,7 @@ class ExtendedGraphiti(Graphiti):
             search_filter,
             include_contradictions,
         )
+
 
     async def enhanced_contradiction_search(
         self,
@@ -851,7 +947,7 @@ class ExtendedGraphiti(Graphiti):
         ContradictionSearchResults
             Enhanced search results with detailed contradiction mappings.
         """
-        return await enhanced_contradiction_search(
+        return await _enhanced_contradiction_search(
             self.clients,
             query,
             config,
@@ -877,7 +973,7 @@ class ExtendedGraphiti(Graphiti):
         dict[str, Any]
             Summary of contradictions including counts and examples.
         """
-        from .search import get_contradiction_edges
+        from .search.handler import get_contradiction_edges
         
         contradiction_edges = await get_contradiction_edges(
             self.driver, group_ids, limit=1000
@@ -897,3 +993,253 @@ class ExtendedGraphiti(Graphiti):
             'contradictions_by_source': contradictions_by_source,
             'recent_contradictions': contradiction_edges[:10],  # Most recent 10
         } 
+
+    async def _get_connected_nodes(self, node_uuid: str) -> list[EntityNode]:
+        """
+        Get nodes directly connected to the given node.
+        
+        Parameters
+        ----------
+        node_uuid : str
+            UUID of the node to get connections for
+            
+        Returns
+        -------
+        list[EntityNode]
+            List of connected nodes
+        """
+        query = """
+        MATCH (n:Entity {uuid: $uuid})-[r]-(connected:Entity)
+        RETURN connected
+        """
+        
+        try:
+            records, _, _ = await self.driver.execute_query(query, uuid=node_uuid)
+            connected_nodes = []
+            for record in records:
+                node_data = record["connected"]
+                connected_nodes.append(EntityNode(**node_data))
+            return connected_nodes
+        except Exception as e:
+            logger.error(f"Error getting connected nodes for {node_uuid}: {e}")
+            return []
+
+    async def _apply_confidence_decay(self, group_id: str):
+        """
+        Apply confidence decay for dormant nodes.
+        
+        Parameters
+        ----------
+        group_id : str
+            Group ID to filter nodes for decay
+        """
+        try:
+            # Get nodes that haven't been referenced recently
+            dormancy_query = """
+            MATCH (n:Entity)
+            WHERE n.confidence IS NOT NULL
+            AND n.confidence_metadata IS NOT NULL
+            AND n.group_id = $group_id
+            RETURN n.uuid as uuid, n.confidence_metadata as metadata
+            """
+            
+            records, _, _ = await self.driver.execute_query(dormancy_query, group_id=group_id)
+            
+            decay_updates = []
+            now = utc_now()
+            
+            for record in records:
+                node_uuid = record["uuid"]
+                metadata_json = record["metadata"]
+                
+                if metadata_json:
+                    try:
+                        import json
+                        metadata = json.loads(metadata_json)
+                        last_reference = metadata.get("last_user_validation")
+                        
+                        if last_reference:
+                            last_reference_dt = datetime.fromisoformat(last_reference)
+                            days_since_reference = (now - last_reference_dt).days
+                            
+                            if days_since_reference > 90:
+                                decay_updates.append((
+                                    node_uuid,
+                                    ConfidenceTrigger.EXTENDED_DORMANCY,
+                                    f"Extended dormancy: {days_since_reference} days",
+                                    {"days_since_reference": days_since_reference}
+                                ))
+                            elif days_since_reference > 30:
+                                decay_updates.append((
+                                    node_uuid,
+                                    ConfidenceTrigger.DORMANCY_DECAY,
+                                    f"Dormancy decay: {days_since_reference} days",
+                                    {"days_since_reference": days_since_reference}
+                                ))
+                    except Exception as e:
+                        logger.error(f"Error processing dormancy for node {node_uuid}: {e}")
+            
+            # Apply decay updates in batch
+            if decay_updates:
+                await self.confidence_manager.update_confidence_batch(decay_updates)
+                logger.info(f"Applied confidence decay to {len(decay_updates)} dormant nodes")
+                
+        except Exception as e:
+            logger.error(f"Error applying confidence decay: {e}")
+
+    async def get_confidence(self, node_uuid: str) -> Optional[float]:
+        """
+        Get confidence for a specific node.
+        
+        Parameters
+        ----------
+        node_uuid : str
+            UUID of the node
+            
+        Returns
+        -------
+        float, optional
+            Confidence value (0.0-1.0) or None if not found
+        """
+        return await self.confidence_manager.get_confidence(node_uuid)
+    
+    async def get_confidence_metadata(self, node_uuid: str):
+        """
+        Get confidence metadata for a specific node.
+        
+        Parameters
+        ----------
+        node_uuid : str
+            UUID of the node
+            
+        Returns
+        -------
+        ConfidenceMetadata, optional
+            Confidence metadata or None if not found
+        """
+        return await self.confidence_manager.get_confidence_metadata(node_uuid)
+    
+    async def update_node_confidence(
+        self,
+        node_uuid: str,
+        trigger: ConfidenceTrigger,
+        reason: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Update confidence for a specific node.
+        
+        Parameters
+        ----------
+        node_uuid : str
+            UUID of the node to update
+        trigger : ConfidenceTrigger
+            The trigger causing the update
+        reason : str
+            Human-readable reason for the update
+        metadata : Dict[str, Any], optional
+            Additional metadata for the update
+        """
+        return await self.confidence_manager.update_confidence(
+            node_uuid, trigger, reason, metadata
+        )
+    
+    async def get_low_confidence_nodes(
+        self, 
+        threshold: float = 0.4,
+        group_ids: Optional[list[str]] = None,
+        limit: int = 100
+    ) -> list[tuple[str, float]]:
+        """
+        Get nodes with confidence below a threshold.
+        
+        Parameters
+        ----------
+        threshold : float, optional
+            Confidence threshold (default: 0.4 for unstable nodes)
+        group_ids : list[str], optional
+            Filter by group IDs
+        limit : int, optional
+            Maximum number of results
+            
+        Returns
+        -------
+        list[tuple[str, float]]
+            List of (node_uuid, confidence) tuples
+        """
+        query = """
+        MATCH (n:Entity)
+        WHERE n.confidence IS NOT NULL
+        AND n.confidence < $threshold
+        """
+        
+        params = {"threshold": threshold, "limit": limit}
+        
+        if group_ids:
+            query += " AND n.group_id IN $group_ids"
+            params["group_ids"] = group_ids
+        
+        query += """
+        RETURN n.uuid as uuid, n.confidence as confidence
+        ORDER BY n.confidence ASC
+        LIMIT $limit
+        """
+        
+        try:
+            records, _, _ = await self.driver.execute_query(query, **params)
+            return [(record["uuid"], record["confidence"]) for record in records]
+        except Exception as e:
+            logger.error(f"Error getting low confidence nodes: {e}")
+            return []
+    
+    async def get_confidence_summary(self, group_ids: Optional[list[str]] = None) -> dict[str, Any]:
+        """
+        Get a summary of confidence statistics.
+        
+        Parameters
+        ----------
+        group_ids : list[str], optional
+            Filter by group IDs
+            
+        Returns
+        -------
+        dict[str, Any]
+            Confidence summary statistics
+        """
+        query = """
+        MATCH (n:Entity)
+        WHERE n.confidence IS NOT NULL
+        """
+        
+        params = {}
+        if group_ids:
+            query += " AND n.group_id IN $group_ids"
+            params["group_ids"] = group_ids
+        
+        query += """
+        RETURN 
+            count(n) as total_nodes,
+            avg(n.confidence) as avg_confidence,
+            min(n.confidence) as min_confidence,
+            max(n.confidence) as max_confidence,
+            count(CASE WHEN n.confidence < 0.4 THEN 1 END) as unstable_nodes,
+            count(CASE WHEN n.confidence < 0.2 THEN 1 END) as low_confidence_nodes
+        """
+        
+        try:
+            records, _, _ = await self.driver.execute_query(query, **params)
+            if records:
+                record = records[0]
+                return {
+                    "total_nodes": record["total_nodes"],
+                    "average_confidence": round(record["avg_confidence"], 3) if record["avg_confidence"] else 0,
+                    "min_confidence": record["min_confidence"],
+                    "max_confidence": record["max_confidence"],
+                    "unstable_nodes": record["unstable_nodes"],
+                    "low_confidence_nodes": record["low_confidence_nodes"],
+                    "unstable_percentage": round((record["unstable_nodes"] / record["total_nodes"]) * 100, 1) if record["total_nodes"] > 0 else 0
+                }
+        except Exception as e:
+            logger.error(f"Error getting confidence summary: {e}")
+        
+        return {} 

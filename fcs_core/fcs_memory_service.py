@@ -396,6 +396,7 @@ class FCSMemoryService:
                 message=f"Failed to add document: {str(e)}"
             )
 
+
     async def search_memory(self, user_id: str, query: SearchQuery) -> Dict[str, Any]:
         """
         Search the memory graph with contradiction awareness.
@@ -415,8 +416,10 @@ class FCSMemoryService:
                 include_contradictions=True
             )
 
-            # Format the results
+            # Format the results - include edges, nodes, and episodes
             formatted_results = []
+            
+            # Process edges (facts)
             for edge in results.edges:
                 edge_data = {
                     "uuid": edge.uuid,
@@ -426,6 +429,9 @@ class FCSMemoryService:
                     "invalid_at": edge.invalid_at,
                     "created_at": edge.created_at,
                     "expired_at": edge.expired_at,
+                    "type": "edge",
+                    "source_node_uuid": edge.source_node_uuid,
+                    "target_node_uuid": edge.target_node_uuid,
                 }
                 
                 # Add contradiction flag
@@ -433,6 +439,33 @@ class FCSMemoryService:
                     edge_data["is_contradiction"] = True
                 
                 formatted_results.append(edge_data)
+
+            # Process nodes (entities)
+            for node in results.nodes:
+                node_data = {
+                    "uuid": node.uuid,
+                    "name": node.name,
+                    "summary": node.summary,
+                    "created_at": node.created_at,
+                    "type": "node",
+                    "labels": node.labels,
+                    "attributes": node.attributes,
+                }
+                formatted_results.append(node_data)
+
+            # Process episodes (conversations/messages)
+            for episode in results.episodes:
+                episode_data = {
+                    "uuid": episode.uuid,
+                    "name": episode.name,
+                    "content": episode.content,
+                    "source_description": episode.source_description,
+                    "created_at": episode.created_at,
+                    "valid_at": episode.valid_at,
+                    "type": "episode",
+                    "source": episode.source.value if episode.source else None,
+                }
+                formatted_results.append(episode_data)
 
             # Count contradiction edges
             contradiction_count = len([e for e in results.edges if e.name == "CONTRADICTS"])
@@ -442,7 +475,13 @@ class FCSMemoryService:
                 "results": formatted_results,
                 "count": len(formatted_results),
                 "contradiction_count": contradiction_count,
-                "has_contradictions": contradiction_count > 0
+                "has_contradictions": contradiction_count > 0,
+                "summary": {
+                    "edges": len(results.edges),
+                    "nodes": len(results.nodes),
+                    "episodes": len(results.episodes),
+                    "communities": len(results.communities)
+                }
             }
 
         except Exception as e:
@@ -452,6 +491,7 @@ class FCSMemoryService:
                 "message": f"Failed to search memory: {str(e)}",
                 "results": []
             }
+
 
     async def get_contradiction_alerts(
         self, 

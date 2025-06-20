@@ -68,16 +68,33 @@ class SearchQuery(BaseModel):
     max_facts: int = Field(default=10, description='The maximum number of facts to retrieve')
 
 
-
 class FactResult(BaseModel):
-    """Response model for a fact result"""
-    uuid: str = Field(..., description="The uuid of the fact")
-    name: str = Field(..., description="The name of the fact")
-    fact: str = Field(..., description="The fact content")
-    valid_at: Optional[datetime] = Field(None, description="When the fact became valid")
-    invalid_at: Optional[datetime] = Field(None, description="When the fact became invalid")
-    created_at: datetime = Field(..., description="When the fact was created")
-    expired_at: Optional[datetime] = Field(None, description="When the fact expired")
+    """Response model for a search result (can be edge, node, or episode)"""
+    uuid: str = Field(..., description="The uuid of the result")
+    type: str = Field(..., description="The type of result: edge, node, or episode")
+    
+    # Edge-specific fields (optional)
+    name: Optional[str] = Field(None, description="The name of the edge/fact")
+    fact: Optional[str] = Field(None, description="The fact content (for edges)")
+    source_node_uuid: Optional[str] = Field(None, description="Source node UUID (for edges)")
+    target_node_uuid: Optional[str] = Field(None, description="Target node UUID (for edges)")
+    is_contradiction: Optional[bool] = Field(None, description="Whether this is a contradiction edge")
+    
+    # Node-specific fields (optional)
+    summary: Optional[str] = Field(None, description="The summary of the node")
+    labels: Optional[List[str]] = Field(None, description="Labels of the node")
+    attributes: Optional[Dict[str, Any]] = Field(None, description="Attributes of the node")
+    
+    # Episode-specific fields (optional)
+    content: Optional[str] = Field(None, description="The content of the episode")
+    source_description: Optional[str] = Field(None, description="Description of the episode source")
+    source: Optional[str] = Field(None, description="Source type of the episode")
+    
+    # Common fields
+    valid_at: Optional[datetime] = Field(None, description="When the result became valid")
+    invalid_at: Optional[datetime] = Field(None, description="When the result became invalid")
+    created_at: Optional[datetime] = Field(None, description="When the result was created")
+    expired_at: Optional[datetime] = Field(None, description="When the result expired")
 
 
 class SearchResults(BaseModel):
@@ -85,6 +102,9 @@ class SearchResults(BaseModel):
     status: str = Field(..., description="Status of the search")
     results: List[FactResult] = Field(..., description="The search results")
     count: int = Field(..., description="Number of results")
+    contradiction_count: Optional[int] = Field(None, description="Number of contradiction edges found")
+    has_contradictions: Optional[bool] = Field(None, description="Whether any contradictions were found")
+    summary: Optional[Dict[str, int]] = Field(None, description="Summary of result types (edges, nodes, episodes, communities)")
 
 
 class OperationResponse(BaseModel):

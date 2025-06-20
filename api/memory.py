@@ -137,7 +137,10 @@ async def search_memory(user_id: str, query: SearchQuery, service: FCSMemoryServ
     return SearchResults(
         status=result["status"],
         results=facts,
-        count=result["count"]
+        count=result["count"],
+        contradiction_count=result.get("contradiction_count"),
+        has_contradictions=result.get("has_contradictions"),
+        summary=result.get("summary")
     )
 
 
