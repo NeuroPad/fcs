@@ -19,7 +19,7 @@ from typing import Any, Protocol, TypedDict
 from graphiti_core.prompts.models import Message, PromptFunction
 from graphiti_core.prompts.prompt_helpers import DO_NOT_ESCAPE_UNICODE
 
-from .contradiction import ContradictedNodes, versions as contradiction_versions
+from .contradiction import ContradictedNodes, ContradictionPairs, versions as contradiction_versions
 
 
 class ExtendedPromptLibrary(Protocol):

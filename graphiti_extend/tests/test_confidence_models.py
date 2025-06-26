@@ -201,8 +201,11 @@ class TestConfidenceUpdate:
         assert update.metadata == {"context": "test"}
         assert isinstance(update.timestamp, datetime)
     
-    def test_confidence_update_default_timestamp(self):
+        def test_confidence_update_default_timestamp(self):
         """Test that timestamp is automatically set."""
+        from graphiti_core.utils.datetime_utils import utc_now
+        
+        before = utc_now()
         update = ConfidenceUpdate(
             node_uuid="test-uuid",
             old_value=0.5,
@@ -210,10 +213,11 @@ class TestConfidenceUpdate:
             trigger=ConfidenceTrigger.USER_REAFFIRMATION,
             reason="Test"
         )
-        
+        after = utc_now()
+
         assert isinstance(update.timestamp, datetime)
-        # Should be recent (within last 5 seconds)
-        assert abs((datetime.now() - update.timestamp).total_seconds()) < 5
+        # Should be between before and after (within reasonable bounds)
+        assert before <= update.timestamp <= after
 
 
 class TestConfidenceConfig:

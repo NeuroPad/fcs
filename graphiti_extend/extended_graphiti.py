@@ -571,7 +571,7 @@ class ExtendedGraphiti(Graphiti):
         previous_episodes: list[EpisodicNode],
     ) -> list[list[EntityEdge]]:
         """
-        Detect contradictions for a list of nodes.
+        Detect contradictions for a list of nodes using the new cognitive object approach.
         
         Parameters
         ----------
@@ -587,40 +587,116 @@ class ExtendedGraphiti(Graphiti):
         list[list[EntityEdge]]
             List of contradiction edge lists for each node.
         """
-        # Get existing nodes for each new node
-        existing_nodes_lists = await get_relevant_nodes(
-            self.driver, nodes, SearchFilters(), min_score=self.contradiction_threshold
-        )
-
-        # Filter out the new nodes themselves from existing node lists to prevent self-contradiction
-        new_node_uuids = {node.uuid for node in nodes}
-        filtered_existing_nodes_lists = []
+        from .contradictions.handler import detect_and_create_node_contradictions
         
-        for existing_nodes in existing_nodes_lists:
-            # Remove any nodes that are in the current batch of new nodes
-            filtered_existing = [
+        # Get all existing nodes in the group to check for contradictions
+        search_query = """
+        MATCH (n:Entity)
+        WHERE n.group_id = $group_id
+        RETURN n
+        """
+        
+        try:
+            records, _, _ = await self.driver.execute_query(
+                search_query, 
+                group_id=episode.group_id
+            )
+            
+            existing_nodes = []
+            for record in records:
+                try:
+                    neo4j_node = record["n"]
+                    
+                    # Convert Neo4j Node object to dictionary
+                    node_data = dict(neo4j_node)
+                    
+                    # Add labels from the Neo4j node
+                    node_data['labels'] = list(neo4j_node.labels)
+                    
+                    # Ensure created_at is a proper datetime object
+                    if 'created_at' in node_data:
+                        created_at = node_data['created_at']
+                        if isinstance(created_at, str):
+                            # Try to parse string datetime
+                            try:
+                                node_data['created_at'] = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                            except ValueError:
+                                # Fallback to current time if parsing fails
+                                node_data['created_at'] = utc_now()
+                        elif not isinstance(created_at, datetime):
+                            # Fallback to current time if not datetime
+                            node_data['created_at'] = utc_now()
+                    else:
+                        # Add created_at if missing
+                        node_data['created_at'] = utc_now()
+                    
+                    # Ensure other required fields are present and valid
+                    if 'labels' not in node_data or not node_data['labels']:
+                        node_data['labels'] = ['Entity']
+                    
+                    if 'summary' not in node_data:
+                        node_data['summary'] = ''
+                    
+                    if 'attributes' not in node_data:
+                        node_data['attributes'] = {}
+                    
+                    existing_node = EntityNode(**node_data)
+                    existing_nodes.append(existing_node)
+                    
+                except Exception as node_error:
+                    logger.error(f"Error creating EntityNode from database record: {str(node_error)}")
+                    # Log only essential node data without embeddings to avoid clutter
+                    try:
+                        # Try to get data from the converted dictionary
+                        essential_data = {
+                            'uuid': node_data.get('uuid', 'unknown') if 'node_data' in locals() else 'unknown',
+                            'name': node_data.get('name', 'unknown') if 'node_data' in locals() else 'unknown',
+                            'labels': node_data.get('labels', []) if 'node_data' in locals() else list(neo4j_node.labels),
+                            'created_at': str(node_data.get('created_at', 'missing')) if 'node_data' in locals() else 'missing',
+                            'summary_length': len(str(node_data.get('summary', ''))) if 'node_data' in locals() else 0
+                        }
+                    except:
+                        # Fallback if we can't access the data
+                        essential_data = {'error': 'Could not extract node data'}
+                    logger.error(f"Essential node data: {essential_data}")
+                    # Skip this node and continue with others
+                    continue
+            
+            # Filter out the new nodes themselves from existing node lists to prevent self-contradiction
+            new_node_uuids = {node.uuid for node in nodes}
+            filtered_existing_nodes = [
                 node for node in existing_nodes 
                 if node.uuid not in new_node_uuids
             ]
-            filtered_existing_nodes_lists.append(filtered_existing)
-
-        # Only detect contradictions for nodes that have existing nodes to compare against
-        contradiction_results = []
-        for node, existing_nodes in zip(nodes, filtered_existing_nodes_lists, strict=True):
-            if existing_nodes:  # Only check for contradictions if there are existing nodes
-                result = await detect_and_create_node_contradictions(
-                    self.llm_client,
-                    node,
-                    existing_nodes,
-                    episode,
-                    previous_episodes,
-                )
-                contradiction_results.append(result)
+            
+            if not filtered_existing_nodes:
+                logger.debug("No existing nodes to check for contradictions")
+                return [[] for _ in nodes]
+            
+            # Use the new contradiction detection system
+            # This will create cognitive objects and contradiction edges automatically
+            contradiction_edges = await detect_and_create_node_contradictions(
+                self.llm_client,
+                episode,
+                filtered_existing_nodes,
+                self.add_triplet,  # Pass add_triplet function
+                previous_episodes,
+            )
+            
+            # Return the edges in the expected format (list of lists)
+            # Since the new system works holistically, we return all edges for the first node
+            # and empty lists for the rest to maintain compatibility
+            if contradiction_edges:
+                result = [contradiction_edges] + [[] for _ in range(len(nodes) - 1)]
             else:
-                # No existing nodes to contradict, return empty list
-                contradiction_results.append([])
-
-        return contradiction_results
+                result = [[] for _ in nodes]
+            
+            logger.info(f"Detected {len(contradiction_edges)} contradiction edges using new cognitive object approach")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in _detect_contradictions_for_nodes: {str(e)}")
+            return [[] for _ in nodes]
 
     async def _create_contradiction_edges_from_invalidation(
         self,

@@ -84,12 +84,15 @@ A FastAPI-powered system implementing **Graph-based Retrieval-Augmented Generati
    poetry shell
    ```
 
-2. **Launch FastAPI server:**
+2. **Launch FastAPI server and run test:**
    ```bash
    ç
    uvicorn main:app --reload --loop=asyncio
 
    poetry run uvicorn main:app --reload --loop=asyncio
+
+
+   poetry run pytest graphiti_extend/tests/ -v
    ```
 
 3. **Access backend at:**
