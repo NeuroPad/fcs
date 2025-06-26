@@ -22,9 +22,52 @@ import { color } from 'html2canvas/dist/types/css/types/color';
 import Header from '../../components/Header/Header';
 import { IonChip, IonLabel } from '@ionic/react';
 import { useParams, useHistory } from 'react-router-dom';
+import ContradictionBox from '../../components/AI/ContradictionBox';
 
 // Add QueryMode type
 type QueryMode = 'normal' | 'graph' | 'combined';
+
+type ExpressionType = 'contradiction' | 'reinforcement' | 'reflection' | 'track';
+
+const expressionScenarios = [
+  {
+    previous: 'Plants need lots of sunlight.',
+    current: 'Plants should be kept in shade.',
+    mode: 'contradiction' as ExpressionType,
+    header: 'Contradiction Detected!',
+    primary: 'Change my view to the new idea',
+    secondary: 'Track this as a new idea',
+  },
+  {
+    previous: 'Exercise is important for health.',
+    current: 'Regular exercise has improved my mood.',
+    mode: 'reinforcement' as ExpressionType,
+    header: 'Reinforcement Detected!',
+    primary: 'Acknowledge reinforcement',
+    secondary: 'Track as repeated idea',
+  },
+  {
+    previous: 'I used to dislike reading.',
+    current: 'Now I enjoy reading every day.',
+    mode: 'reflection' as ExpressionType,
+    header: 'Reflection Opportunity!',
+    primary: 'Reflect on this change',
+    secondary: 'Track as new perspective',
+  },
+  {
+    previous: 'I have never tried meditation.',
+    current: 'I want to start meditating.',
+    mode: 'track' as ExpressionType,
+    header: 'New Idea Detected!',
+    primary: 'Adopt this new idea',
+    secondary: 'Just track, don\'t change view',
+  },
+];
+
+function getRandomScenario() {
+  const idx = Math.floor(Math.random() * expressionScenarios.length);
+  return expressionScenarios[idx];
+}
 
 const Chat: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -39,6 +82,15 @@ const Chat: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   // Changed default mode to 'graph' instead of 'normal'
   const [queryMode, setQueryMode] = useState<QueryMode>('normal');
+
+  // Expression state for demo: randomly pick a scenario on load
+  const [expression, setExpression] = useState(() => {
+    const scenario = getRandomScenario();
+    return {
+      ...scenario,
+      visible: true,
+    };
+  });
 
   // Fetch chat by sessionId on mount or when sessionId changes
   useEffect(() => {
@@ -70,18 +122,13 @@ const Chat: React.FC = () => {
   const sendNewMessage = async () => {
     if (newMessage.trim() !== '' && !isTyping) {
       setIsTyping(true);
-      // Store the message before clearing the input
       const messageToSend = newMessage;
-      // Clear the input immediately for better user experience
       setNewMessage('');
-      
       try {
-        // Add user message to the chat immediately
         dispatch(addUserMessage(messageToSend));
-        
         if (chatId) {
           await dispatch(sendMessage({ 
-            sessionId: chatId.toString(), // Convert number to string
+            sessionId: chatId.toString(),
             message: messageToSend,
             mode: queryMode 
           })).unwrap();
@@ -91,12 +138,27 @@ const Chat: React.FC = () => {
             mode: queryMode 
           })).unwrap();
         }
+        // Simulate contradiction or new idea event (alternate for demo)
+        setExpression((prev) => ({
+          ...prev,
+          visible: true,
+        }));
       } catch (error) {
         console.error('Error sending message:', error);
       } finally {
         setIsTyping(false);
       }
     }
+  };
+
+  // Handlers for ContradictionBox actions
+  const handleChangeView = () => {
+    setExpression((c) => ({ ...c, visible: false }));
+    // Optionally, show a toast or feedback
+  };
+  const handleTrackNewIdea = () => {
+    setExpression((c) => ({ ...c, visible: false }));
+    // Optionally, show a toast or feedback
   };
 
   // Add mode selector component
@@ -137,6 +199,16 @@ const Chat: React.FC = () => {
       <Header title="FCS Chat" />
       <div className="chat-layout">
         <div className="chat-interface-container">
+          {/* ExpressionBox appears above chat input when triggered */}
+          <ContradictionBox
+            previousStatement={expression.previous}
+            currentStatement={expression.current}
+            mode={expression.mode === 'track' ? 'track' : 'contradiction'}
+            visible={expression.visible}
+            header={expression.header}
+            onChangeView={handleChangeView}
+            onTrackNewIdea={handleTrackNewIdea}
+          />
           {/* Commented out ModeSelector component */}
           {/* <ModeSelector /> */}
           <IonContent className="chat-content">
