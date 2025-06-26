@@ -169,7 +169,7 @@ class ConfidenceManager:
             return None
         
         # Calculate confidence change
-        confidence_change = self._calculate_confidence_change(trigger, metadata)
+        confidence_change = await self._calculate_confidence_change(trigger, metadata)
         if confidence_change == 0:
             return None
         
