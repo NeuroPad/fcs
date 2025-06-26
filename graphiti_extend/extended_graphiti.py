@@ -681,6 +681,7 @@ class ExtendedGraphiti(Graphiti):
                 filtered_existing_nodes,
                 self.add_triplet,  # Pass add_triplet function
                 previous_episodes,
+                self.driver,  # Pass driver for duplicate checking
             )
             
             # Return the edges in the expected format (list of lists)

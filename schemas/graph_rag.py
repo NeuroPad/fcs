@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Union, List
+from schemas.chat import ReasoningNode
 
 
 class Question(BaseModel):
@@ -15,3 +16,4 @@ class ExtendedGraphRAGResponse(BaseModel):
     images: Optional[List[str]] = None
     sources: Optional[List[str]] = None
     memory_facts: Optional[str] = None
+    reasoning_nodes: Optional[List[ReasoningNode]] = Field(None, description="Nodes used during reasoning process")

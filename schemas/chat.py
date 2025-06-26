@@ -4,6 +4,17 @@ from typing import List, Optional
 from datetime import datetime
 
 
+class ReasoningNode(BaseModel):
+    """Represents a node used during reasoning process"""
+    uuid: str
+    name: str
+    salience: Optional[float] = None
+    confidence: Optional[float] = None
+    summary: Optional[str] = None
+    node_type: Optional[str] = None
+    used_in_context: Optional[str] = None  # How this node was used in the reasoning
+
+
 class ChatMessageCreate(BaseModel):
     role: str
     content: Optional[str] = None

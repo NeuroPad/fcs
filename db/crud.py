@@ -26,10 +26,14 @@ class ChatService:
         return self.db_session.query(ChatSession).filter(ChatSession.user_id == user_id).all()
 
     def add_message_to_session(
-        self, session_id: int, role: str, content: str, image_path: str = None
+        self, session_id: int, role: str, content: str, image_path: str = None, reasoning_nodes: list = None
     ):
         new_message = ChatMessage(
-            session_id=session_id, role=role, content=content, image_path=image_path
+            session_id=session_id, 
+            role=role, 
+            content=content, 
+            image_path=image_path,
+            nodes_referenced=reasoning_nodes
         )
         self.db_session.add(new_message)
         self.db_session.commit()

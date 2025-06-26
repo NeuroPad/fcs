@@ -7,6 +7,7 @@ import asyncio
 import json
 
 from schemas.graph_rag import ExtendedGraphRAGResponse
+from schemas.chat import ReasoningNode
 from pydantic import BaseModel, Field
 
 from llama_index.core import (
@@ -34,6 +35,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from fcs_core import FCSMemoryService, Message
 from schemas.memory import SearchQuery
+
+# Import for graph mode
+from services.graphiti_enhanced_search import GraphitiEnhancedSearchService
 
 # System-related content for FCS queries
 SYSTEM_CONTEXT = """
@@ -245,9 +249,16 @@ class RAGService:
                 "document_id": document_id
             }
     
-    async def query(self, query_text: str, user_id: int, top_k: int = 5, chat_history: List[Dict[str, Any]] = None, user: Dict[str, Any] = None) -> ExtendedGraphRAGResponse:
+    async def query(self, query_text: str, user_id: int, top_k: int = 5, chat_history: List[Dict[str, Any]] = None, user: Dict[str, Any] = None, mode: str = "normal") -> ExtendedGraphRAGResponse:
         """Query the RAG index for a specific user"""
         try:
+            # Handle graph mode separately
+            if mode == "graph":
+                return await self._query_graph_mode(query_text, user_id, chat_history, user)
+            elif mode == "combined":
+                return await self._query_combined_mode(query_text, user_id, top_k, chat_history, user)
+            
+            # Default normal mode
             # Create retriever with user_id filter for multi-tenancy
             retriever = self.index.as_retriever(
                 filters=MetadataFilters(
@@ -277,17 +288,31 @@ class RAGService:
                     elif role == "assistant":
                         chat_context += f"Assistant: {content}\n"
                         
-            # Retrieve user memory facts
+            # Retrieve user memory facts and convert to reasoning nodes
             memory_facts_context = ""
+            reasoning_nodes = []  # Initialize empty list for memory-based reasoning nodes
             try:
                 memory_service = FCSMemoryService()
-                search_query = SearchQuery(query=query_text, max_facts=3)  # Adjust max_facts as needed
+                search_query = SearchQuery(query=query_text, max_facts=5)  # Increase to get more nodes
                 memory_search_results = await memory_service.search_memory(str(user_id), search_query)
                 
                 if memory_search_results.get("status") == "success" and memory_search_results.get("results"):
                     memory_facts_context = "\n\nUser memory facts:\n"
                     for fact in memory_search_results.get("results"):
                         memory_facts_context += f"- {fact.get('fact')}\n"
+                        
+                        # Convert memory fact to reasoning node
+                        reasoning_node = ReasoningNode(
+                            uuid=fact.get('uuid', f"memory-{fact.get('name', 'unknown')}"),
+                            name=fact.get('name', fact.get('fact', '')[:50] + "..." if len(fact.get('fact', '')) > 50 else fact.get('fact', '')),
+                            salience=self._calculate_memory_salience(fact),
+                            confidence=self._calculate_memory_confidence(fact),
+                            summary=fact.get('fact', ''),
+                            node_type="memory",
+                            used_in_context="memory_retrieval"
+                        )
+                        reasoning_nodes.append(reasoning_node)
+                        
                     logger.info(f"Retrieved {len(memory_search_results.get('results'))} memory facts for user_id: {user_id}")
             except Exception as e:
                 logger.warning(f"Error retrieving memory facts for user_id {user_id}: {str(e)}")
@@ -407,12 +432,13 @@ class RAGService:
                 else:
                     logger.warning("No user_id provided in user object, or user object not provided, skipping memory storage for RAG query")
             
-            # Return the response
+            # Return the response with reasoning nodes from memory
             return ExtendedGraphRAGResponse(
                 answer=structured_response.answer,
                 images=None,
                 sources=structured_response.sources,
-                memory_facts=structured_response.memory_facts
+                memory_facts=structured_response.memory_facts,
+                reasoning_nodes=reasoning_nodes  # Include memory nodes as reasoning nodes
             )
         
         except Exception as e:
@@ -421,7 +447,243 @@ class RAGService:
             return ExtendedGraphRAGResponse(
                 answer=f"Error querying index: {str(e)}",
                 images=None,
-                sources=None
+                sources=None,
+                reasoning_nodes=[]
+            )
+    
+    def _calculate_memory_salience(self, memory_fact: Dict[str, Any]) -> float:
+        """Calculate salience for memory facts based on validity and creation time"""
+        try:
+            # Start with base salience
+            salience = 0.5
+            
+            # Boost for more recent facts
+            if memory_fact.get('created_at'):
+                try:
+                    from datetime import datetime
+                    if isinstance(memory_fact['created_at'], str):
+                        created_at = datetime.fromisoformat(memory_fact['created_at'].replace('Z', '+00:00'))
+                    else:
+                        created_at = memory_fact['created_at']
+                    
+                    days_old = (datetime.now().replace(tzinfo=created_at.tzinfo) - created_at).days
+                    # More recent facts are more salient (decay over 365 days)
+                    recency_boost = max(0.1, 1.0 - (days_old / 365.0))
+                    salience *= recency_boost
+                except:
+                    pass
+            
+            # Boost for valid facts
+            if memory_fact.get('valid_at') and not memory_fact.get('invalid_at'):
+                salience += 0.3
+            
+            # Boost based on fact length (more detailed facts might be more important)
+            fact_content = memory_fact.get('fact', '')
+            if len(fact_content) > 100:  # Detailed facts
+                salience += 0.1
+            
+            return min(1.0, max(0.1, salience))
+            
+        except Exception as e:
+            logger.warning(f"Error calculating memory salience: {e}")
+            return 0.5
+    
+    def _calculate_memory_confidence(self, memory_fact: Dict[str, Any]) -> float:
+        """Calculate confidence for memory facts based on validity and expiration"""
+        try:
+            confidence = 0.7  # Base confidence
+            
+            # Higher confidence for facts that are explicitly valid
+            if memory_fact.get('valid_at') and not memory_fact.get('invalid_at'):
+                confidence += 0.2
+            
+            # Lower confidence for expired facts
+            if memory_fact.get('expired_at'):
+                try:
+                    from datetime import datetime
+                    if isinstance(memory_fact['expired_at'], str):
+                        expired_at = datetime.fromisoformat(memory_fact['expired_at'].replace('Z', '+00:00'))
+                        if datetime.now().replace(tzinfo=expired_at.tzinfo) > expired_at:
+                            confidence -= 0.3
+                except:
+                    pass
+            
+            # Confidence based on fact completeness
+            fact_content = memory_fact.get('fact', '')
+            if len(fact_content) > 50 and len(fact_content) < 500:  # Well-sized facts
+                confidence += 0.1
+            
+            return min(1.0, max(0.1, confidence))
+            
+        except Exception as e:
+            logger.warning(f"Error calculating memory confidence: {e}")
+            return 0.7
+    
+    async def _query_graph_mode(
+        self, 
+        query_text: str, 
+        user_id: int, 
+        chat_history: List[Dict[str, Any]] = None, 
+        user: Dict[str, Any] = None
+    ) -> ExtendedGraphRAGResponse:
+        """Query using graph mode with node tracking"""
+        try:
+            # Initialize graphiti memory service for graph search
+            memory_service = FCSMemoryService()
+            
+            # Check if graphiti clients are available
+            if not hasattr(memory_service, 'graphiti') or not memory_service.graphiti:
+                logger.warning("Graph mode not available, falling back to normal mode")
+                return await self.query(query_text, user_id, mode="normal")
+            
+            # Initialize enhanced search service
+            enhanced_search = GraphitiEnhancedSearchService(memory_service.graphiti.clients)
+            
+            # Perform search with node tracking
+            search_result = await enhanced_search.search_with_node_tracking(
+                query=query_text,
+                group_ids=[str(user_id)],
+                max_nodes=10
+            )
+            
+            # Get reasoning nodes
+            reasoning_nodes = search_result.get("reasoning_nodes", [])
+            
+            # Format chat history
+            chat_context = ""
+            if chat_history and len(chat_history) > 0:
+                recent_history = chat_history[-7:] if len(chat_history) > 7 else chat_history
+                chat_context = "\n\nRecent conversation history:\n"
+                for msg in recent_history:
+                    role = msg.get("role", "")
+                    content = msg.get("content", "")
+                    if role == "user":
+                        chat_context += f"User: {content}\n"
+                    elif role == "assistant":
+                        chat_context += f"Assistant: {content}\n"
+            
+            # Build context from search results
+            graph_context = ""
+            if search_result.get("search_results") and search_result["search_results"].nodes:
+                graph_context = "\n\nKnowledge Graph Context:\n"
+                for i, node in enumerate(search_result["search_results"].nodes[:5], 1):
+                    graph_context += f"{i}. {node.name}: {node.summary}\n"
+            
+            # Build reasoning summary
+            reasoning_summary = await enhanced_search.generate_reasoning_summary(
+                reasoning_nodes, query_text
+            )
+            
+            # Generate response using LLM
+            graph_prompt = f"""
+            You are an AI assistant with access to a knowledge graph. Answer the user's question using the provided context.
+            
+            User Question: {query_text}
+            
+            Knowledge Graph Context:
+            {graph_context}
+            
+            Chat History:
+            {chat_context}
+            
+            Reasoning Process:
+            {reasoning_summary}
+            
+            Please provide a comprehensive answer based on the knowledge graph context. If you reference specific information, indicate that it comes from the knowledge graph.
+            """
+            
+            response = await self.llm.acomplete(graph_prompt)
+            answer = response.text
+            
+            # Store interaction in memory if user is provided
+            if user and user.get('id'):
+                try:
+                    # Add user query to memory
+                    user_message = Message(
+                        content=query_text,
+                        role_type="user",
+                        role=user.get('name', ''),
+                        source_description="user query (graph mode)",
+                        name=f"user-query-graph-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    )
+                    await memory_service.add_message(user['id'], user_message)
+                    
+                    # Add AI response to memory
+                    ai_message = Message(
+                        content=answer,
+                        role_type="assistant",
+                        source_description="ai assistant (graph mode)",
+                        name=f"ai-response-graph-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    )
+                    await memory_service.add_message(user['id'], ai_message)
+                    logger.info(f"Successfully stored graph mode chat in memory for user_id: {user['id']}")
+                except Exception as e:
+                    logger.error(f"Error storing graph mode chat in memory: {str(e)}")
+            
+            return ExtendedGraphRAGResponse(
+                answer=answer,
+                images=None,
+                sources=None,
+                memory_facts=reasoning_summary,
+                reasoning_nodes=reasoning_nodes
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in graph mode query: {str(e)}")
+            return ExtendedGraphRAGResponse(
+                answer=f"Error in graph mode query: {str(e)}",
+                images=None,
+                sources=None,
+                reasoning_nodes=[]
+            )
+    
+    async def _query_combined_mode(
+        self, 
+        query_text: str, 
+        user_id: int, 
+        top_k: int = 5,
+        chat_history: List[Dict[str, Any]] = None, 
+        user: Dict[str, Any] = None
+    ) -> ExtendedGraphRAGResponse:
+        """Query using combined mode (both RAG and graph)"""
+        try:
+            # Get normal RAG response
+            rag_response = await self.query(query_text, user_id, top_k, chat_history, user, mode="normal")
+            
+            # Get graph response
+            graph_response = await self._query_graph_mode(query_text, user_id, chat_history, user)
+            
+            # Combine the responses
+            combined_answer = f"""
+            **Based on Document Knowledge:**
+            {rag_response.answer}
+            
+            **Based on Knowledge Graph:**
+            {graph_response.answer}
+            """
+            
+            # Combine sources and reasoning nodes
+            combined_sources = []
+            if rag_response.sources:
+                combined_sources.extend(rag_response.sources)
+            
+            combined_reasoning_nodes = graph_response.reasoning_nodes or []
+            
+            return ExtendedGraphRAGResponse(
+                answer=combined_answer,
+                images=None,
+                sources=combined_sources,
+                memory_facts=graph_response.memory_facts,
+                reasoning_nodes=combined_reasoning_nodes
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in combined mode query: {str(e)}")
+            return ExtendedGraphRAGResponse(
+                answer=f"Error in combined mode query: {str(e)}",
+                images=None,
+                sources=None,
+                reasoning_nodes=[]
             )
     
     

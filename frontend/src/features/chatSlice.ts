@@ -10,6 +10,15 @@ interface ChatMessage {
   content: string;
   images?: string[];
   sources?: string[];
+  reasoning_nodes?: Array<{
+    uuid: string;
+    name: string;
+    salience?: number;
+    confidence?: number;
+    summary?: string;
+    node_type?: string;
+    used_in_context?: string;
+  }>;
   created_at?: string;
 }
 

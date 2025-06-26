@@ -309,13 +309,60 @@ def _find_or_create_node(
         return None
 
 
+
+async def _contradiction_exists(
+    driver,
+    node1_uuid: str,
+    node2_uuid: str,
+) -> bool:
+    """
+    Check if a CONTRADICTS relationship already exists between two nodes.
+    
+    Parameters
+    ----------
+    driver
+        Neo4j driver instance
+    node1_uuid : str
+        UUID of first node
+    node2_uuid : str
+        UUID of second node
+        
+    Returns
+    -------
+    bool
+        True if contradiction relationship exists in either direction
+    """
+    query = """
+    MATCH (n1:Entity {uuid: $node1_uuid})-[r:CONTRADICTS]-(n2:Entity {uuid: $node2_uuid})
+    RETURN count(r) as count
+    """
+    
+    try:
+        records, _, _ = await driver.execute_query(
+            query, 
+            node1_uuid=node1_uuid, 
+            node2_uuid=node2_uuid
+        )
+        
+        if records and records[0]["count"] > 0:
+            logger.debug(f"Contradiction already exists between {node1_uuid} and {node2_uuid}")
+            return True
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error checking for existing contradiction: {str(e)}")
+        return False
+
+
 async def create_contradiction_edges_from_pairs(
     contradiction_pairs: List[tuple[EntityNode, EntityNode, str]],
     episode: EpisodicNode,
     add_triplet_func: Callable[[EntityNode, EntityEdge, EntityNode], Any],
+    driver = None,
 ) -> List[EntityEdge]:
     """
     Create CONTRADICTS edges from contradiction pairs using add_triplet.
+    Only creates edges if they don't already exist.
     
     Parameters
     ----------
@@ -325,6 +372,8 @@ async def create_contradiction_edges_from_pairs(
         Current episode
     add_triplet_func : Callable
         Function to add triplet (source_node, edge, target_node)
+    driver : optional
+        Neo4j driver for checking existing relationships
         
     Returns
     -------
@@ -336,6 +385,11 @@ async def create_contradiction_edges_from_pairs(
     
     for node1, node2, reason in contradiction_pairs:
         try:
+            # Check if contradiction already exists between these nodes
+            if driver and await _contradiction_exists(driver, node1.uuid, node2.uuid):
+                logger.info(f'Contradiction already exists between {node1.name} and {node2.name}, skipping creation')
+                continue
+            
             # Create contradiction edge
             contradiction_edge = EntityEdge(
                 source_node_uuid=node1.uuid,
@@ -370,6 +424,7 @@ async def detect_and_create_node_contradictions(
     existing_nodes: List[EntityNode],
     add_triplet_func: Callable[[EntityNode, EntityEdge, EntityNode], Any],
     previous_episodes: Optional[List[EpisodicNode]] = None,
+    driver = None,
 ) -> List[EntityEdge]:
     """
     Main function to detect contradictions and create contradiction edges.
@@ -406,7 +461,7 @@ async def detect_and_create_node_contradictions(
         
         # Step 2: Create contradiction edges using add_triplet
         contradiction_edges = await create_contradiction_edges_from_pairs(
-            contradiction_pairs, episode, add_triplet_func
+            contradiction_pairs, episode, add_triplet_func, driver
         )
         
         logger.info(f"Successfully created {len(contradiction_edges)} contradiction edges")

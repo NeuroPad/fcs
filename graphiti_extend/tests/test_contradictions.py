@@ -731,4 +731,140 @@ class TestContradictionSystem:
         edge = result[0]
         assert isinstance(edge, EntityEdge)
         assert edge.name == 'CONTRADICTS'
-        assert 'numerical correction' in edge.attributes['contradiction_reason'].lower() 
+        assert 'numerical correction' in edge.attributes['contradiction_reason'].lower()
+
+    @pytest.mark.asyncio
+    async def test_duplicate_contradiction_prevention(self, mock_llm_client, mock_add_triplet):
+        """Test that duplicate contradiction relationships are not created."""
+        # Create episode mentioning the same contradiction again
+        episode = EpisodicNode(
+            name="Repeated Contradiction",
+            group_id="1",
+            labels=[],
+            source=EpisodeType.message,
+            content="I still hate football now",
+            source_description="User reaffirming hatred for football",
+            created_at=utc_now(),
+            valid_at=utc_now(),
+        )
+        
+        # Create existing nodes
+        love_node = EntityNode(
+            name="I love football",
+            group_id="1",
+            labels=["Entity"],
+            summary="User loves football",
+            created_at=utc_now(),
+        )
+        
+        hate_node = EntityNode(
+            name="I hate football now",
+            group_id="1",
+            labels=["Entity"],
+            summary="User hates football now",
+            created_at=utc_now(),
+        )
+        
+        existing_nodes = [love_node, hate_node]
+        
+        # Mock LLM response detecting the same contradiction again
+        mock_llm_client.generate_response.return_value = {
+            'contradiction_pairs': [
+                {
+                    'node1': {
+                        'name': 'I love football',
+                        'summary': 'User loves football',
+                        'entity_type': 'Entity'
+                    },
+                    'node2': {
+                        'name': 'I hate football now',
+                        'summary': 'User hates football now',
+                        'entity_type': 'Entity'
+                    },
+                    'contradiction_reason': 'User changed preference from loving to hating football'
+                }
+            ]
+        }
+        
+        # Mock driver that returns existing contradiction
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = ([{"count": 1}], None, None)  # Contradiction exists
+        
+        # Test the detection with existing contradiction
+        result = await detect_and_create_node_contradictions(
+            mock_llm_client, episode, existing_nodes, mock_add_triplet, driver=mock_driver
+        )
+        
+        # Should return empty list since contradiction already exists
+        assert result == []
+        
+        # Verify driver was called to check for existing contradiction
+        mock_driver.execute_query.assert_called_once()
+        
+        # Verify add_triplet was NOT called since contradiction already exists
+        mock_add_triplet.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_new_contradiction_creation_when_none_exists(self, mock_llm_client, mock_add_triplet):
+        """Test that new contradictions are created when none exist."""
+        # Create episode with new contradiction
+        episode = EpisodicNode(
+            name="New Contradiction",
+            group_id="1",
+            labels=[],
+            source=EpisodeType.message,
+            content="I hate tennis now",
+            source_description="User expressing hatred for tennis",
+            created_at=utc_now(),
+            valid_at=utc_now(),
+        )
+        
+        # Create existing nodes
+        love_tennis_node = EntityNode(
+            name="I love tennis",
+            group_id="1",
+            labels=["Entity"],
+            summary="User loves tennis",
+            created_at=utc_now(),
+        )
+        
+        existing_nodes = [love_tennis_node]
+        
+        # Mock LLM response detecting new contradiction
+        mock_llm_client.generate_response.return_value = {
+            'contradiction_pairs': [
+                {
+                    'node1': {
+                        'name': 'I love tennis',
+                        'summary': 'User loves tennis',
+                        'entity_type': 'Entity'
+                    },
+                    'node2': {
+                        'name': 'I hate tennis now',
+                        'summary': 'User hates tennis now',
+                        'entity_type': 'Entity'
+                    },
+                    'contradiction_reason': 'User changed preference from loving to hating tennis'
+                }
+            ]
+        }
+        
+        # Mock driver that returns no existing contradiction
+        mock_driver = AsyncMock()
+        mock_driver.execute_query.return_value = ([{"count": 0}], None, None)  # No contradiction exists
+        
+        # Test the detection with no existing contradiction
+        result = await detect_and_create_node_contradictions(
+            mock_llm_client, episode, existing_nodes, mock_add_triplet, driver=mock_driver
+        )
+        
+        # Should create one contradiction edge
+        assert len(result) == 1
+        edge = result[0]
+        assert edge.name == 'CONTRADICTS'
+        
+        # Verify driver was called to check for existing contradiction
+        mock_driver.execute_query.assert_called_once()
+        
+        # Verify add_triplet was called to create new contradiction
+        mock_add_triplet.assert_called_once() 

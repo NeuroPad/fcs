@@ -23,6 +23,7 @@ import Header from '../../components/Header/Header';
 import { IonChip, IonLabel } from '@ionic/react';
 import { useParams, useHistory } from 'react-router-dom';
 import ContradictionBox from '../../components/AI/ContradictionBox';
+import ReasoningNodes from '../../components/AI/ReasoningNodes';
 
 // Add QueryMode type
 type QueryMode = 'normal' | 'graph' | 'combined';
@@ -200,7 +201,7 @@ const Chat: React.FC = () => {
       <div className="chat-layout">
         <div className="chat-interface-container">
           {/* ExpressionBox appears above chat input when triggered */}
-          <ContradictionBox
+          {/* <ContradictionBox
             previousStatement={expression.previous}
             currentStatement={expression.current}
             mode={expression.mode === 'track' ? 'track' : 'contradiction'}
@@ -208,7 +209,7 @@ const Chat: React.FC = () => {
             header={expression.header}
             onChangeView={handleChangeView}
             onTrackNewIdea={handleTrackNewIdea}
-          />
+          /> */}
           {/* Commented out ModeSelector component */}
           {/* <ModeSelector /> */}
           <IonContent className="chat-content">
@@ -234,6 +235,13 @@ const Chat: React.FC = () => {
                         ))}
                       </ul>
                     </div>
+                  )}
+
+                  {msg.reasoning_nodes && msg.reasoning_nodes.length > 0 && (
+                    <ReasoningNodes 
+                      nodes={msg.reasoning_nodes} 
+                      title={`Reasoning Nodes Used (${msg.reasoning_nodes.length})`}
+                    />
                   )}
                 </div>
               ))}

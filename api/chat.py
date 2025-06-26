@@ -99,11 +99,20 @@ async def get_chat_session(
             except json.JSONDecodeError:
                 pass
 
+        # Extract reasoning nodes if available
+        reasoning_nodes = []
+        if msg.nodes_referenced:
+            try:
+                reasoning_nodes = msg.nodes_referenced if isinstance(msg.nodes_referenced, list) else []
+            except Exception as e:
+                logger.warning(f"Error parsing reasoning nodes: {e}")
+
         messages.append({
             "role": msg.role,
             "content": content,
             "images": images,
             "sources": sources,
+            "reasoning_nodes": reasoning_nodes,
             "created_at": msg.created_at,
         })
 
@@ -193,14 +202,15 @@ async def ask_question(
         }
         
         # Get response based on mode, passing chat history and user object
-        if mode == "normal":
+        if mode in ["normal", "graph", "combined"]:
             # Initialize RAG service for the query
             rag_service = RAGService()
             response = await rag_service.query(
                 query_text=request.text,
                 user_id=user.id,
                 chat_history=chat_history,
-                user=user_obj
+                user=user_obj,
+                mode=mode
             )
         
         
@@ -209,14 +219,21 @@ async def ask_question(
         assistant_content = json.dumps({
             "answer": response.answer,
             "images": response.images if hasattr(response, "images") else [],
-            "sources": response.sources if hasattr(response, "sources") else []
+            "sources": response.sources if hasattr(response, "sources") else [],
+            "reasoning_nodes": [node.dict() for node in response.reasoning_nodes] if hasattr(response, "reasoning_nodes") and response.reasoning_nodes else []
         })
 
-        # Add assistant response to chat history
+        # Prepare reasoning nodes for database storage
+        reasoning_nodes_data = None
+        if hasattr(response, "reasoning_nodes") and response.reasoning_nodes:
+            reasoning_nodes_data = [node.dict() for node in response.reasoning_nodes]
+
+        # Add assistant response to chat history with reasoning nodes
         chat_service.add_message_to_session(
             session_id=session_id,
             role="assistant",
-            content=assistant_content
+            content=assistant_content,
+            reasoning_nodes=reasoning_nodes_data
         )
 
         return response

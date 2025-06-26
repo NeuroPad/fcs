@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from db.session import Base
@@ -21,6 +21,7 @@ class ChatMessage(Base):
     role = Column(String)  # 'user' or 'assistant'
     content = Column(Text)  # Text content
     image_path = Column(String, nullable=True)  # Path to the image (if any)
+    nodes_referenced = Column(JSON, nullable=True)  # JSON array of nodes used during reasoning
     created_at = Column(DateTime, default=datetime.utcnow)
     session = relationship("ChatSession", back_populates="messages")
 
