@@ -101,7 +101,7 @@ class AddEpisodeResults(BaseModel):
 class Graphiti:
     def __init__(
         self,
-        uri: str | None = None,
+        uri: str,
         user: str | None = None,
         password: str | None = None,
         llm_client: LLMClient | None = None,
@@ -162,12 +162,7 @@ class Graphiti:
         Graphiti if you're using the default OpenAIClient.
         """
 
-        if graph_driver:
-            self.driver = graph_driver
-        else:
-            if uri is None:
-                raise ValueError("uri must be provided when graph_driver is None")
-            self.driver = Neo4jDriver(uri, user, password)
+        self.driver = graph_driver if graph_driver else Neo4jDriver(uri, user, password)
 
         self.database = DEFAULT_DATABASE
         self.store_raw_episode_content = store_raw_episode_content

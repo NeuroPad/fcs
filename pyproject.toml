@@ -52,6 +52,7 @@ passlib = "^1.7.4"
 python-jose = "^3.4.0"
 pytest = "^8.3.5"
 fastapi-utilities = "^0.3.1"
+google-genai = "^1.23.0"
 
 
 [tool.poetry.group.dev.dependencies]
