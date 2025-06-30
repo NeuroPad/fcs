@@ -86,7 +86,7 @@ A FastAPI-powered system implementing **Graph-based Retrieval-Augmented Generati
 
 2. **Launch FastAPI server and run test:**
    ```bash
-   ç
+   
    uvicorn main:app --reload --loop=asyncio
 
    poetry run uvicorn main:app --reload --loop=asyncio

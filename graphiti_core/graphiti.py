@@ -29,7 +29,12 @@ from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather, validate_group_id
+from graphiti_core.helpers import (
+    DEFAULT_DATABASE,
+    semaphore_gather,
+    validate_excluded_entity_types,
+    validate_group_id,
+)
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import SearchConfig, search
@@ -46,6 +51,7 @@ from graphiti_core.search.search_utils import (
     get_mentioned_nodes,
     get_relevant_edges,
 )
+from graphiti_core.telemetry import capture_event
 from graphiti_core.utils.bulk_utils import (
     RawEpisode,
     add_nodes_and_edges_bulk,
@@ -181,6 +187,61 @@ class Graphiti:
             cross_encoder=self.cross_encoder,
         )
 
+        # Capture telemetry event
+        self._capture_initialization_telemetry()
+
+    def _capture_initialization_telemetry(self):
+        """Capture telemetry event for Graphiti initialization."""
+        try:
+            # Detect provider types from class names
+            llm_provider = self._get_provider_type(self.llm_client)
+            embedder_provider = self._get_provider_type(self.embedder)
+            reranker_provider = self._get_provider_type(self.cross_encoder)
+            database_provider = self._get_provider_type(self.driver)
+
+            properties = {
+                'llm_provider': llm_provider,
+                'embedder_provider': embedder_provider,
+                'reranker_provider': reranker_provider,
+                'database_provider': database_provider,
+            }
+
+            capture_event('graphiti_initialized', properties)
+        except Exception:
+            # Silently handle telemetry errors
+            pass
+
+    def _get_provider_type(self, client) -> str:
+        """Get provider type from client class name."""
+        if client is None:
+            return 'none'
+
+        class_name = client.__class__.__name__.lower()
+
+        # LLM providers
+        if 'openai' in class_name:
+            return 'openai'
+        elif 'azure' in class_name:
+            return 'azure'
+        elif 'anthropic' in class_name:
+            return 'anthropic'
+        elif 'crossencoder' in class_name:
+            return 'crossencoder'
+        elif 'gemini' in class_name:
+            return 'gemini'
+        elif 'groq' in class_name:
+            return 'groq'
+        # Database providers
+        elif 'neo4j' in class_name:
+            return 'neo4j'
+        elif 'falkor' in class_name:
+            return 'falkordb'
+        # Embedder providers
+        elif 'voyage' in class_name:
+            return 'voyage'
+        else:
+            return 'unknown'
+
     async def close(self):
         """
         Close the connection to the Neo4j database.
@@ -293,6 +354,7 @@ class Graphiti:
         uuid: str | None = None,
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
+        excluded_entity_types: list[str] | None = None,
         previous_episode_uuids: list[str] | None = None,
         edge_types: dict[str, BaseModel] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
@@ -321,6 +383,12 @@ class Graphiti:
             Optional uuid of the episode.
         update_communities : bool
             Optional. Whether to update communities with new node information
+        entity_types : dict[str, BaseModel] | None
+            Optional. Dictionary mapping entity type names to their Pydantic model definitions.
+        excluded_entity_types : list[str] | None
+            Optional. List of entity type names to exclude from the graph. Entities classified
+            into these types will not be added to the graph. Can include 'Entity' to exclude
+            the default entity type.
         previous_episode_uuids : list[str] | None
             Optional.  list of episode uuids to use as the previous episodes. If this is not provided,
             the most recent episodes by created_at date will be used.
@@ -351,6 +419,7 @@ class Graphiti:
             now = utc_now()
 
             validate_entity_types(entity_types)
+            validate_excluded_entity_types(excluded_entity_types, entity_types)
             validate_group_id(group_id)
 
             previous_episodes = (
@@ -389,7 +458,7 @@ class Graphiti:
             # Extract entities as nodes
 
             extracted_nodes = await extract_nodes(
-                self.clients, episode, previous_episodes, entity_types
+                self.clients, episode, previous_episodes, entity_types, excluded_entity_types
             )
 
             # Extract edges and resolve nodes
@@ -534,7 +603,7 @@ class Graphiti:
                 extracted_nodes,
                 extracted_edges,
                 episodic_edges,
-            ) = await extract_nodes_and_edges_bulk(self.clients, episode_pairs)
+            ) = await extract_nodes_and_edges_bulk(self.clients, episode_pairs, None, None)
 
             # Generate embeddings
             await semaphore_gather(
