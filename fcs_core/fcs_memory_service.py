@@ -33,8 +33,8 @@ from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError, No
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from graphiti_core.utils.bulk_utils import RawEpisode
 
-from schemas.memory import SearchQuery
-from core.config import settings
+from app.schemas.memory import SearchQuery
+from app.core.config import settings
 
 from .models import CognitiveObject, Message, ContradictionAlert, FCSResponse
 from .async_worker import async_worker
@@ -798,7 +798,8 @@ class FCSMemoryService:
 
             return {
                 "status": "success",
-                "top_nodes": top_nodes,
+                "connections": top_nodes,  # API expects "connections"
+                "count": len(top_nodes),   # API expects "count"
                 "top_facts": top_facts,
                 "contradiction_facts": contradiction_facts
             }

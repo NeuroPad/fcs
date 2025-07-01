@@ -6,7 +6,7 @@ Test script for the Reasoning Nodes feature
 import asyncio
 import json
 from datetime import datetime
-from services.graphiti_enhanced_search import GraphitiEnhancedSearchService
+from app.services.graphiti_enhanced_search import GraphitiEnhancedSearchService
 from schemas.chat import ReasoningNode
 from schemas.graph_rag import ExtendedGraphRAGResponse
 
