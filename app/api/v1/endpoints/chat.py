@@ -208,37 +208,48 @@ async def ask_question(
         if mode == "graph":
             from app.services.llama_index_graph_rag import GraphRAGService
             graph_rag_service = GraphRAGService()
-            answer_data = await graph_rag_service.get_answer(request.text)
+            answer_data = await graph_rag_service.get_answer(request.text, chat_history, user_obj)
             response_content = json.dumps({
                 "answer": answer_data.answer,
-                "reasoning_nodes": answer_data.reasoning_nodes,
+                "reasoning_nodes": [node.dict() for node in answer_data.reasoning_nodes] if answer_data.reasoning_nodes else [],
                 "sources": answer_data.sources or []
             })
         elif mode == "combined":
             # Use both RAG and Graph RAG
-            normal_result = await rag_service.query(request.text, user.id)
+            normal_result = await rag_service.query(request.text, user.id, chat_history=chat_history, user=user_obj)
             from app.services.llama_index_graph_rag import GraphRAGService
             graph_rag_service = GraphRAGService()
-            graph_result = await graph_rag_service.get_answer(request.text)
+            graph_result = await graph_rag_service.get_answer(request.text, chat_history, user_obj)
             
             response_content = json.dumps({
-                "answer": f"Combined Response:\n\nRAG: {normal_result.get('answer', '')}\n\nGraph RAG: {graph_result.answer}",
-                "reasoning_nodes": graph_result.reasoning_nodes,
-                "sources": (normal_result.get('sources', []) + (graph_result.sources or []))
+                "answer": f"Combined Response:\n\nRAG: {normal_result.answer if normal_result.answer else ''}\n\nGraph RAG: {graph_result.answer}",
+                "reasoning_nodes": [node.dict() for node in graph_result.reasoning_nodes] if graph_result.reasoning_nodes else [],
+                "sources": (normal_result.sources or []) + (graph_result.sources or [])
             })
         else:
             # Normal RAG mode
-            result = await rag_service.query(request.text, user.id)
+            result = await rag_service.query(request.text, user.id, chat_history=chat_history, user=user_obj)
             response_content = json.dumps({
-                "answer": result.get('answer', 'No answer found'),
-                "sources": result.get('sources', [])
+                "answer": result.answer if result.answer else 'No answer found',
+                "sources": result.sources if result.sources else [],
+                "reasoning_nodes": [node.dict() for node in result.reasoning_nodes] if result.reasoning_nodes else []
             })
+        
+        # Extract reasoning nodes from response content for storage
+        nodes_referenced = []
+        try:
+            parsed_response = json.loads(response_content)
+            if parsed_response.get("reasoning_nodes"):
+                nodes_referenced = parsed_response["reasoning_nodes"]
+        except (json.JSONDecodeError, KeyError):
+            pass
         
         # Add assistant response to chat
         chat_service.add_message_to_session(
             session_id=session_id,
             role="assistant",
-            content=response_content
+            content=response_content,
+            nodes_referenced=nodes_referenced
         )
         
         return {"status": "success", "response": response_content}

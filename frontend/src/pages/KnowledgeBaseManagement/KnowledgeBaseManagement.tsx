@@ -266,7 +266,7 @@ const KnowledgeBaseManagement: React.FC = () => {
   // Knowledge Base Functions
   const fetchGraphStats = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/graph-rag/stats`, {
+      const response = await fetch(`${API_BASE_URL}/rag/graph/stats`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -296,7 +296,7 @@ const KnowledgeBaseManagement: React.FC = () => {
 
   const fetchRelationships = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/graph-rag/relationships`, {
+      const response = await fetch(`${API_BASE_URL}/rag/graph/relationships`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -353,7 +353,7 @@ const KnowledgeBaseManagement: React.FC = () => {
     setShowToast(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/graph-rag/process-documents`, {
+      const response = await fetch(`${API_BASE_URL}/rag/graph/process-documents`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -365,7 +365,7 @@ const KnowledgeBaseManagement: React.FC = () => {
         throw new Error('Failed to trigger KG creation');
       }
 
-      const websocket = new WebSocket(`ws://${API_BASE_URL.replace('http://', '')}/graph-rag/ws/process-documents`);
+      const websocket = new WebSocket(`ws://${API_BASE_URL.replace('http://', '')}/rag/graph/ws/process-documents`);
 
       websocket.onmessage = (event) => {
         const status: ProcessingStatus = JSON.parse(event.data);

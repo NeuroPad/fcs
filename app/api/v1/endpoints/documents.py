@@ -61,7 +61,12 @@ async def get_documents(
     """Get all documents for the current user"""
     try:
         documents = await document_service.get_user_documents(current_user.id, db)
-        return {"documents": documents}
+        total_size = sum(doc.file_size for doc in documents)
+        return {
+            "documents": documents,
+            "count": len(documents),
+            "total_size": total_size
+        }
     except Exception as e:
         logger.error(f"Error getting documents: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -20,6 +20,44 @@ from pydantic import BaseModel, Field
 from graphiti_core.utils.datetime_utils import utc_now
 
 
+# Custom Edge Types for FCS System
+class Reinforces(BaseModel):
+    """Edge representing one cognitive object reinforcing another."""
+    strength: Optional[float] = Field(None, description="Strength of reinforcement (0.0-1.0)")
+    evidence_type: Optional[str] = Field(None, description="Type of evidence supporting reinforcement")
+    confidence_boost: Optional[float] = Field(None, description="Confidence boost provided by this reinforcement")
+
+
+class Elaborates(BaseModel):
+    """Edge representing one cognitive object elaborating on another."""
+    elaboration_type: Optional[str] = Field(None, description="Type of elaboration: detail, example, clarification")
+    depth_level: Optional[int] = Field(None, description="Level of elaboration depth (1-5)")
+    added_context: Optional[str] = Field(None, description="Summary of additional context provided")
+
+
+class Extends(BaseModel):
+    """Edge representing one cognitive object extending another."""
+    extension_type: Optional[str] = Field(None, description="Type of extension: logical, temporal, conceptual")
+    scope_expansion: Optional[str] = Field(None, description="How the scope is expanded")
+    new_dimensions: Optional[List[str]] = Field(default_factory=list, description="New dimensions or aspects added")
+
+
+class CausedBy(BaseModel):
+    """Edge representing causal relationship between cognitive objects."""
+    causality_type: Optional[str] = Field(None, description="Type of causality: direct, indirect, contributory")
+    temporal_relation: Optional[str] = Field(None, description="Temporal relationship: immediate, delayed, ongoing")
+    certainty_level: Optional[float] = Field(None, description="Certainty of causal relationship (0.0-1.0)")
+    evidence_strength: Optional[str] = Field(None, description="Strength of evidence: weak, moderate, strong")
+
+
+class Supports(BaseModel):
+    """Edge representing one cognitive object supporting another."""
+    support_type: Optional[str] = Field(None, description="Type of support: evidence, logical, empirical, anecdotal")
+    weight: Optional[float] = Field(None, description="Weight of support (0.0-1.0)")
+    reliability: Optional[str] = Field(None, description="Reliability of support: low, medium, high")
+    source_credibility: Optional[float] = Field(None, description="Credibility of the supporting source (0.0-1.0)")
+
+
 class CognitiveObject(BaseModel):
     """Structured representation of user-expressed or system-derived ideas."""
     id: str = Field(..., description="Unique identifier (UUID)")
@@ -27,7 +65,7 @@ class CognitiveObject(BaseModel):
     type: str = Field(..., description="Enum: idea, contradiction, reference, system_note")
     confidence: float = Field(default=0.7, description="Float [0.0 – 1.0] — how sure the system is this idea is currently valid")
     salience: float = Field(default=0.5, description="Float — how central or reinforced this idea is within the session")
-    source: str = Field(..., description="One of user, external, or system")
+    source: str = Field(..., description="One of user, external, or system where user is the user query, external is the user's external sources, and system is the system or ai assistant generated content")
     flags: List[str] = Field(default_factory=list, description="Optional list, e.g. tracked, contradiction, external, unverified, dismissed")
     parent_ids: List[str] = Field(default_factory=list, description="List of UUIDs — COs this idea directly builds on")
     child_ids: List[str] = Field(default_factory=list, description="List of UUIDs — COs derived from this idea")

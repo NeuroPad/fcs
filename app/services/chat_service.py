@@ -34,28 +34,50 @@ class ChatService:
 
     def get_all_chat_sessions(self):
         return self.db_session.query(ChatSession).all()
+    
+    def get_user_chat_sessions(self, user_id: int):
+        return (
+            self.db_session.query(ChatSession)
+            .filter(ChatSession.user_id == user_id)
+            .order_by(ChatSession.created_at.desc())
+            .all()
+        )
 
     def add_message_to_session(
-        self, session_id: int, role: str, content: str, image_path: str = None
+        self, session_id: int, role: str, content: str, image_path: str = None, nodes_referenced: list = None
     ):
         new_message = ChatMessage(
-            session_id=session_id, role=role, content=content, image_path=image_path
+            session_id=session_id, 
+            role=role, 
+            content=content, 
+            image_path=image_path,
+            nodes_referenced=nodes_referenced
         )
         self.db_session.add(new_message)
         self.db_session.commit()
         return new_message
 
     def delete_chat_session(self, session_id: int):
-        session = (
-            self.db_session.query(ChatSession)
-            .filter(ChatSession.id == session_id)
-            .first()
-        )
-        if session:
-            self.db_session.delete(session)
+        try:
+            # First delete all messages associated with this session
+            self.db_session.query(ChatMessage).filter(
+                ChatMessage.session_id == session_id
+            ).delete(synchronize_session=False)
+            
+            # Then delete the session
+            session = (
+                self.db_session.query(ChatSession)
+                .filter(ChatSession.id == session_id)
+                .first()
+            )
+            if session:
+                self.db_session.delete(session)
+            
             self.db_session.commit()
             return True
-        return False
+        except Exception as e:
+            self.db_session.rollback()
+            return False
 
     async def save_chat_image(self, image: UploadFile) -> str:
         """Save an uploaded image to the chat_images folder and return its path."""

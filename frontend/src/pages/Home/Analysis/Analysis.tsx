@@ -60,7 +60,7 @@ export default function Analysis() {
   const fetchGraphStats = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/graph-rag/stats`);
+      const response = await fetch(`${API_BASE_URL}/rag/graph/stats`);
       if (!response.ok) {
         throw new Error('Failed to fetch graph statistics');
       }

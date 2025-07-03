@@ -36,7 +36,10 @@ from graphiti_core.utils.bulk_utils import RawEpisode
 from app.schemas.memory import SearchQuery
 from app.core.config import settings
 
-from .models import CognitiveObject, Message, ContradictionAlert, FCSResponse
+from .models import (
+    CognitiveObject, Message, ContradictionAlert, FCSResponse,
+    Reinforces, Elaborates, Extends, CausedBy, Supports
+)
 from .async_worker import async_worker
 
 logger = logging.getLogger(__name__)
@@ -94,6 +97,24 @@ class FCSMemoryService:
         
         # Define entity types
         self.entity_types = {"CognitiveObject": CognitiveObject}
+        
+        # Define custom edge types for FCS system
+        self.edge_types = {
+            "REINFORCES": Reinforces,
+            "ELABORATES": Elaborates,
+            "EXTENDS": Extends,
+            "CAUSED_BY": CausedBy,
+            "SUPPORTS": Supports
+        }
+        
+        # Define edge type mapping for CognitiveObject relationships
+        self.edge_type_map = {
+            ("CognitiveObject", "CognitiveObject"): [
+                "REINFORCES", "ELABORATES", "EXTENDS", "CAUSED_BY", "SUPPORTS"
+            ],
+            # Fallback for other entity types (including generic Entity nodes)
+            ("Entity", "Entity"): ["RELATES_TO"]
+        }
         
         # Contradiction handling
         self.contradiction_callback = contradiction_callback
@@ -209,7 +230,9 @@ class FCSMemoryService:
                 reference_time=m.timestamp,
                 source=EpisodeType.message,
                 source_description=m.source_description or "Chat message",
-                entity_types=self.entity_types
+                entity_types=self.entity_types,
+                # edge_types=self.edge_types,
+                # edge_type_map=self.edge_type_map
             )
             
             # Handle contradiction results
@@ -252,7 +275,9 @@ class FCSMemoryService:
                 reference_time=m.timestamp,
                 source=EpisodeType.message,
                 source_description=m.source_description or "Chat message",
-                entity_types=self.entity_types
+                entity_types=self.entity_types,
+                # edge_types=self.edge_types,
+                # edge_type_map=self.edge_type_map
             )
             
             # Handle contradiction results
@@ -306,7 +331,9 @@ class FCSMemoryService:
                 reference_time=utc_now(),
                 source=EpisodeType.text,
                 source_description=chunk_desc,
-                entity_types=self.entity_types
+                entity_types=self.entity_types,
+                # edge_types=self.edge_types,
+                # edge_type_map=self.edge_type_map
             )
             
             # Handle contradiction results
@@ -658,7 +685,9 @@ class FCSMemoryService:
                                     reference_time=utc_now(),
                                     source=EpisodeType.json,
                                     source_description=f"JSON file: {file_name}",
-                                    entity_types=self.entity_types
+                                    entity_types=self.entity_types,
+                                    # edge_types=self.edge_types,
+                                    # edge_type_map=self.edge_type_map
                                 )
                                 logger.info(f"Added JSON document {file_name} to memory")
                                 return result
@@ -685,7 +714,9 @@ class FCSMemoryService:
                                     reference_time=utc_now(),
                                     source=source_type,
                                     source_description=f"File: {file_name}, Chunk {i+1}/{chunks_len}",
-                                    entity_types=self.entity_types
+                                    entity_types=self.entity_types,
+                                    # edge_types=self.edge_types,
+                                    # edge_type_map=self.edge_type_map
                                 )
                                 logger.info(f"Added chunk {chunk_name} to memory")
                                 return result

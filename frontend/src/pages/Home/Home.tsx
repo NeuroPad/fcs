@@ -46,7 +46,7 @@ const Home: React.FC = () => {
       setIsAnalyzing(true);
       try {
         const firstImage = results.similar_images[0];
-        const ragQuery = await fetch(`${API_BASE_URL}/graph-rag/ask`, {
+        const ragQuery = await fetch(`${API_BASE_URL}/rag/graph/ask`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

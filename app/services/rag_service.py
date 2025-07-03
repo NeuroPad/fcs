@@ -451,6 +451,7 @@ class RAGService:
                 reasoning_nodes=[]
             )
     
+    
     def _calculate_memory_salience(self, memory_fact: Dict[str, Any]) -> float:
         """Calculate salience for memory facts based on validity and creation time"""
         try:

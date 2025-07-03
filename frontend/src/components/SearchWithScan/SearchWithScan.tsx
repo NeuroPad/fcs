@@ -57,7 +57,7 @@ const SearchWithScan: React.FC<SearchWithScanProps> = ({
           formData.append('top_k', '5');
 
           try {
-            const response = await fetch(`${API_BASE_URL}/graph-rag/find-similar`, {
+            const response = await fetch(`${API_BASE_URL}/rag/graph/find-similar`, {
               method: 'POST',
               body: formData,
             });
