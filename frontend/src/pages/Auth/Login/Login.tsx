@@ -13,6 +13,8 @@ export default function Login() {
   const dispatch = useAppDispatch();
   const [loading, setLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
   const [showPassword, setShowPassword] = useState(false);
 
   const schema = yup.object({
@@ -39,11 +41,16 @@ export default function Login() {
       .unwrap()
       .then((res) => {
         setLoading(false);
-        setShowToast(true); // Show success toast
+        setToastType('success');
+        setToastMessage('Login successful!');
+        setShowToast(true);
         console.log('Res: ', res);
       })
       .catch((error) => {
         setLoading(false);
+        setToastType('error');
+        setToastMessage(error || 'Invalid email or password. Please try again.');
+        setShowToast(true);
         console.log('Error: ', error);
       });
 
@@ -94,7 +101,7 @@ export default function Login() {
                 className='custom-input'
               />
               <IonIcon
-                icon={showPassword ? eyeOffOutline : eyeOutline} // Toggle icon
+                icon={showPassword ? eyeOffOutline : eyeOutline}
                 style={{
                   position: 'absolute',
                   right: 20,
@@ -102,7 +109,7 @@ export default function Login() {
                   cursor: 'pointer',
                   fontSize: '20px',
                 }}
-                onClick={() => setShowPassword(!showPassword)} // Toggle show/hide state
+                onClick={() => setShowPassword(!showPassword)}
               />
               <p className='custom-input-error'>{errors.password?.message}</p>
             </div>
@@ -130,8 +137,9 @@ export default function Login() {
         <IonToast
           isOpen={showToast}
           onDidDismiss={() => setShowToast(false)}
-          message='User logged in successfully'
-          duration={2000}
+          message={toastMessage}
+          duration={3000}
+          color={toastType === 'error' ? 'danger' : 'success'}
         />
       </Container>
     </IonPage>
