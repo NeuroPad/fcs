@@ -38,6 +38,7 @@ poetry.lock
 chat.db
 chat_images
 fcs.db
+memduo.db
 
 #model related items
 /models/
