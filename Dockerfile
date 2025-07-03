@@ -25,6 +25,10 @@ RUN for i in 1 2 3; do \
         sleep 10; \
     done
 
+# Copy the startup script first and set permissions
+COPY start.sh /app/
+RUN chmod +x /app/start.sh
+
 # Copy the rest of the application
 COPY . /app/
 
@@ -66,11 +70,8 @@ RUN if [ ! -d "/app/models/bge-small-en-v1.5" ]; then \
 #         sleep 10; \
 #     done
 
-# Make startup script executable
-RUN chmod +x /app/start.sh
-
 # Expose the port the app runs on
 EXPOSE 8000
 
-# Use the startup script as the entry point
-CMD ["/app/start.sh"]
+# Use shell form to ensure proper shell execution
+CMD /bin/bash /app/start.sh
