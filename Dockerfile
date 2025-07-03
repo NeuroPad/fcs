@@ -17,9 +17,11 @@ COPY pyproject.toml poetry.lock* /app/
 RUN pip install poetry==2.1.2 && \
     poetry --version
 
+# Configure poetry to install to system Python
+RUN poetry config virtualenvs.create false
+
 # Install dependencies with retry mechanism
 RUN for i in 1 2 3; do \
-        poetry config virtualenvs.create false && \
         poetry install --no-interaction --no-ansi && break || \
         echo "Retry installing dependencies: $i" && \
         sleep 10; \
@@ -47,6 +49,11 @@ RUN if [ ! -d "/app/models/bge-small-en-v1.5" ]; then \
     else \
         echo "BGE model already exists, skipping download"; \
     fi
+
+# Verify critical packages are installed
+RUN python -c "import sqlalchemy; import alembic; import uvicorn" || \
+    (echo "Critical packages not found. Installing again..." && \
+     poetry install --no-interaction --no-ansi)
 
 # # Download Relik model with retry mechanism and existence check
 # RUN if [ ! -d "/app/models/relik-relation-extraction-small" ]; then \
