@@ -31,19 +31,6 @@ COPY . /app/
 # Create models directory
 RUN mkdir -p /app/models
 
-# Download and setup models with retry mechanism and existence check
-# RUN if [ ! -d "/app/models/en_core_web_lg" ]; then \
-#         for i in 1 2 3; do \
-#             python -m spacy download en_core_web_lg && \
-#             python -c "import spacy; import os; os.symlink(spacy.util.get_package_path('en_core_web_lg'), '/app/models/en_core_web_lg')" && \
-#             break || \
-#             echo "Retry downloading spaCy model: $i" && \
-#             sleep 10; \
-#         done; \
-#     else \
-#         echo "SpaCy model already exists, skipping download"; \
-#     fi
-
 # Download BGE model with retry mechanism and existence check
 RUN if [ ! -d "/app/models/bge-small-en-v1.5" ]; then \
         for i in 1 2 3; do \
@@ -79,8 +66,11 @@ RUN if [ ! -d "/app/models/bge-small-en-v1.5" ]; then \
 #         sleep 10; \
 #     done
 
+# Make startup script executable
+RUN chmod +x /app/start.sh
+
 # Expose the port the app runs on
 EXPOSE 8000
 
-# Command to run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "asyncio"]
+# Use the startup script as the entry point
+CMD ["/app/start.sh"]
