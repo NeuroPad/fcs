@@ -249,7 +249,7 @@ class RAGService:
                 "document_id": document_id
             }
     
-    async def query(self, query_text: str, user_id: int, top_k: int = 5, chat_history: List[Dict[str, Any]] = None, user: Dict[str, Any] = None, mode: str = "normal") -> ExtendedGraphRAGResponse:
+    async def query(self, query_text: str, user_id: int, top_k: int = 15, chat_history: List[Dict[str, Any]] = None, user: Dict[str, Any] = None, mode: str = "normal") -> ExtendedGraphRAGResponse:
         """Query the RAG index for a specific user"""
         try:
             # Handle graph mode separately
