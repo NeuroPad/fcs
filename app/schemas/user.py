@@ -8,7 +8,7 @@ class UserBase(BaseModel):
     name: str
     is_active: Optional[bool] = True
     machine_name: Optional[str] = None
-    contradiction_tolerance: Optional[int] = None
+    contradiction_tolerance: Optional[float] = None
     belief_sensitivity: Optional[str] = None
     salience_decay_speed: Optional[str] = "default"
 
@@ -22,7 +22,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     is_active: Optional[bool] = None
     machine_name: Optional[str] = None
-    contradiction_tolerance: Optional[int] = None
+    contradiction_tolerance: Optional[float] = None
     belief_sensitivity: Optional[str] = None
     salience_decay_speed: Optional[str] = None
 
@@ -41,4 +41,4 @@ class User(UserInDBBase):
 
 
 class UserInDB(UserInDBBase):
-    hashed_password: str 
+    hashed_password: str

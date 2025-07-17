@@ -14,16 +14,9 @@ from sqlalchemy.orm import Session
 from app.models.document import Document
 from app.core.config import settings
 from app.db.session import get_db 
-
-from docling_core.types.doc import ImageRefMode
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.pipeline_options import AcceleratorDevice
+from app.services.mineru_service import MinerUService
 
 logger = logging.getLogger(__name__)
-
-IMAGE_RESOLUTION_SCALE = 2.0
 
 
 class AsyncWorker:
@@ -68,6 +61,13 @@ class DocumentService:
         
         # Create upload directory if it doesn't exist
         self.upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize MinerU service
+        if settings.MINERU_API_TOKEN:
+            self.mineru_service = MinerUService(settings.MINERU_API_TOKEN)
+        else:
+            logger.warning("MinerU API token not configured - PDF processing will be disabled")
+            self.mineru_service = None
     
     @classmethod
     async def initialize_worker(cls):
@@ -153,18 +153,44 @@ class DocumentService:
             raise
     
     async def queue_pdf_processing(self, document_id: int) -> Dict[str, Any]:
-        """Queue a PDF document for processing in the background"""
+        """Queue a PDF document for processing in the background using MinerU"""
+        if not self.mineru_service:
+            logger.warning(f"MinerU service not available for document {document_id} - API token not configured")
+            return {
+                "status": "warning",
+                "message": "MinerU service not available - PDF processing disabled",
+                "queue_size": 0
+            }
+        
+        # Test MinerU service availability by trying to get upload URL
+        try:
+            batch_id, upload_url = await self.mineru_service.get_upload_url("test.pdf")
+            if not batch_id or not upload_url:
+                logger.warning(f"MinerU service test failed for document {document_id} - service unavailable")
+                return {
+                    "status": "warning",
+                    "message": "MinerU service unavailable - PDF processing disabled",
+                    "queue_size": 0
+                }
+        except Exception as e:
+            logger.warning(f"MinerU service test failed for document {document_id}: {str(e)}")
+            return {
+                "status": "warning",
+                "message": "MinerU service unavailable - PDF processing disabled",
+                "queue_size": 0
+            }
+        
         # Create a task for the async worker
-        await async_worker.queue.put(partial(self._process_scanned_pdf, document_id))
+        await async_worker.queue.put(partial(self._process_pdf_with_mineru, document_id))
         
         return {
             "status": "queued",
-            "message": f"Document {document_id} queued for processing. Jobs in queue: {async_worker.queue.qsize()}",
+            "message": f"Document {document_id} queued for MinerU processing. Jobs in queue: {async_worker.queue.qsize()}",
             "queue_size": async_worker.queue.qsize()
         }
     
-    async def _process_scanned_pdf(self, document_id: int) -> Dict[str, Any]:
-        """Process a scanned PDF file to extract text using docling"""
+    async def _process_pdf_with_mineru(self, document_id: int) -> Dict[str, Any]:
+        """Process a PDF file using MinerU API"""
         # Get a new database session for this background task
         db: Session = next(get_db())
         try:
@@ -177,6 +203,19 @@ class DocumentService:
             document.status = "processing"
             db.commit()
             db.refresh(document)
+            
+            # Check if MinerU service is available
+            if not self.mineru_service:
+                error_msg = "MinerU service not available - API token not configured"
+                logger.error(error_msg)
+                document.status = "failed"
+                document.error_message = error_msg
+                db.commit()
+                return {
+                    "status": "error",
+                    "message": error_msg,
+                    "document_id": document.id
+                }
             
             # Check if file is a PDF
             if not document.content_type.endswith("/pdf"):
@@ -191,59 +230,72 @@ class DocumentService:
             # Get file path
             pdf_path = Path(document.file_path)
             
-            # Initialize options
-            pipeline_options = PdfPipelineOptions()
-            pipeline_options.images_scale = IMAGE_RESOLUTION_SCALE
-            pipeline_options.generate_page_images = False  # Disable page images
-            pipeline_options.generate_picture_images = True
-            
-            pipeline_options.accelerator_options.device = AcceleratorDevice.MPS
-            pipeline_options.accelerator_options.num_threads = 8
-            
-            # Create converter with options
-            doc_converter = DocumentConverter(
-                format_options={
-                    InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+            # Check file size (MinerU has 200MB limit)
+            file_size_mb = pdf_path.stat().st_size / (1024 * 1024)
+            if file_size_mb > 200:
+                error_msg = f"File size ({file_size_mb:.1f} MB) exceeds MinerU limit of 200MB"
+                logger.error(error_msg)
+                document.status = "failed"
+                document.error_message = error_msg
+                db.commit()
+                return {
+                    "status": "error",
+                    "message": error_msg,
+                    "document_id": document.id
                 }
-            )
+            
+            # Create output directory for this document
+            doc_filename = pdf_path.stem
+            output_dir = self.upload_dir / f"{doc_filename}_mineru_output"
             
             start_time = time.time()
             
-            # Convert the PDF
-            conv_res = doc_converter.convert(pdf_path)
-            
-            # Create output directories
-            doc_filename = conv_res.input.file.stem
-            
-            # Save markdown version
-            md_ref_filename = self.upload_dir / f"{doc_filename}-with-refs.md"
-            conv_res.document.save_as_markdown(
-                md_ref_filename, image_mode=ImageRefMode.REFERENCED
+            # Process with MinerU
+            logger.info(f"Starting MinerU processing for document {document_id}")
+            result = await self.mineru_service.process_document(
+                file_path=pdf_path,
+                output_dir=output_dir,
+                data_id=f"doc_{document.id}_{int(time.time())}"
             )
             
             end_time = time.time() - start_time
             
-            logger.info(
-                f"Document converted and figures exported in {end_time:.2f} seconds."
-            )
-            
-            # Update document record
-            document.markdown_path = str(md_ref_filename)
-            document.status = "completed"
-            document.processed_at = datetime.utcnow()
-            db.commit()
-            db.refresh(document)
+            if result["status"] == "success":
+                # Update document record with success
+                markdown_path = result["markdown_path"]
+                document.markdown_path = markdown_path
+                document.status = "completed"
+                document.processed_at = datetime.utcnow()
+                db.commit()
+                db.refresh(document)
 
-            return {
-                "status": "success",
-                "message": f"Document processed successfully in {end_time:.2f} seconds",
-                "document_id": document.id,
-                "pdf": str(pdf_path),
-                "markdown": str(md_ref_filename)
-            }
+                logger.info(f"MinerU processing completed in {end_time:.2f} seconds for document {document_id}")
+                
+                return {
+                    "status": "success",
+                    "message": f"Document processed successfully in {end_time:.2f} seconds",
+                    "document_id": document.id,
+                    "pdf": str(pdf_path),
+                    "markdown": markdown_path,
+                    "zip_url": result.get("zip_url")
+                }
+            else:
+                # Processing failed
+                error_msg = result.get("error", "Unknown MinerU processing error")
+                logger.error(f"MinerU processing failed for document {document_id}: {error_msg}")
+                
+                document.status = "failed"
+                document.error_message = error_msg
+                db.commit()
+                
+                return {
+                    "status": "error",
+                    "message": error_msg,
+                    "document_id": document.id
+                }
         
         except Exception as e:
-            logger.error(f"Error processing document {document_id}: {str(e)}")
+            logger.error(f"Error processing document {document_id} with MinerU: {str(e)}")
             
             # Update document status
             document = db.query(Document).filter(Document.id == document_id).first()
@@ -296,14 +348,15 @@ class DocumentService:
                 markdown_path.unlink()
                 files_deleted.append(str(markdown_path))
                 
-                # Check for artifacts directory
-                artifacts_dir = markdown_path.parent / f"{markdown_path.stem}_artifacts"
-                if artifacts_dir.exists() and artifacts_dir.is_dir():
-                    for file in artifacts_dir.glob("*"):
-                        file.unlink()
-                        files_deleted.append(str(file))
-                    artifacts_dir.rmdir()
-                    files_deleted.append(str(artifacts_dir))
+                # Check for MinerU output directory
+                output_dir = markdown_path.parent
+                if output_dir.exists() and output_dir.is_dir() and "mineru_output" in output_dir.name:
+                    for file in output_dir.glob("*"):
+                        if file.is_file():
+                            file.unlink()
+                            files_deleted.append(str(file))
+                    output_dir.rmdir()
+                    files_deleted.append(str(output_dir))
             
             # Delete document from database
             db.delete(document)

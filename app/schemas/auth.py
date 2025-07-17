@@ -20,4 +20,7 @@ class UserLogin(BaseModel):
 class UserRegister(BaseModel):
     email: str
     name: str
-    password: str 
+    password: str
+    machine_name: Optional[str] = None
+    contradiction_tolerance: Optional[float] = None
+    belief_sensitivity: Optional[str] = None

@@ -86,4 +86,4 @@ async def read_root():
 @app.get('/healthcheck')
 async def healthcheck():
     """Health check endpoint."""
-    return JSONResponse(content={'status': 'healthy'}, status_code=200) 
+    return JSONResponse(content={'status': 'healthy'}, status_code=200)

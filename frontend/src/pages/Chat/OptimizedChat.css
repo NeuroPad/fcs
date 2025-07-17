@@ -1,0 +1,290 @@
+/* Optimized Chat Component Styles */
+
+.mode-selector {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+  overflow-x: auto;
+  background-color: var(--ion-background-color);
+  border-bottom: 1px solid var(--ion-color-light);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.mode-selector::-webkit-scrollbar {
+  display: none;
+}
+
+.mode-selector ion-chip {
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-selector ion-chip:hover {
+  transform: translateY(-1px);
+}
+
+/* Optimistic and error message styles */
+.chat-message.optimistic {
+  opacity: 0.7;
+  position: relative;
+}
+
+.chat-message.optimistic::after {
+  content: "Sending...";
+  position: absolute;
+  top: 5px;
+  right: 10px;
+  font-size: 0.8em;
+  color: var(--ion-color-medium);
+  background: var(--ion-color-light);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.chat-message.error {
+  border-left: 3px solid var(--ion-color-danger);
+  background-color: rgba(var(--ion-color-danger-rgb), 0.1);
+}
+
+.error-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.error-actions ion-button {
+  --padding-start: 8px;
+  --padding-end: 8px;
+  font-size: 0.9em;
+}
+
+/* Virtualized messages container */
+.virtualized-messages {
+  width: 100%;
+  height: 100%;
+}
+
+.virtualized-messages > div {
+  padding: 8px 16px;
+}
+
+/* Empty chat state */
+.empty-chat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--ion-color-medium);
+  font-style: italic;
+}
+
+/* Enhanced typing indicator */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--ion-color-medium);
+  font-style: italic;
+}
+
+.typing-indicator ion-spinner {
+  --color: var(--ion-color-primary);
+}
+
+/* Message preview */
+.message-preview {
+  padding: 4px 16px;
+  font-size: 0.9em;
+  color: var(--ion-color-medium);
+  background-color: var(--ion-color-light);
+  border-top: 1px solid var(--ion-color-light-shade);
+}
+
+/* Lazy loading image placeholder */
+.image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  background-color: var(--ion-color-light);
+  color: var(--ion-color-medium);
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+/* Enhanced chat input */
+.chat-input-container {
+  border-top: 1px solid var(--ion-color-light);
+  background-color: var(--ion-background-color);
+}
+
+.input-wrapper {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 12px;
+}
+
+.chat-input {
+  flex: 1;
+  --background: var(--ion-color-light);
+  --border-radius: 20px;
+  --padding-start: 16px;
+  --padding-end: 16px;
+  --padding-top: 12px;
+  --padding-bottom: 12px;
+  transition: all 0.2s ease;
+}
+
+.chat-input:focus-within {
+  --background: var(--ion-color-light-tint);
+  transform: scale(1.02);
+}
+
+.send-button {
+  --border-radius: 50%;
+  --padding-start: 12px;
+  --padding-end: 12px;
+  --padding-top: 12px;
+  --padding-bottom: 12px;
+  width: 48px;
+  height: 48px;
+  transition: all 0.2s ease;
+}
+
+.send-button:not([disabled]):hover {
+  transform: scale(1.1);
+}
+
+.send-button[disabled] {
+  opacity: 0.5;
+}
+
+.brain-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.brain-icon:hover {
+  transform: rotate(10deg) scale(1.1);
+}
+
+/* Performance optimizations */
+.chat-message {
+  contain: layout style;
+  will-change: transform;
+}
+
+.chat-images {
+  contain: layout;
+}
+
+.chat-image {
+  will-change: transform;
+  transition: transform 0.2s ease;
+}
+
+.chat-image:hover {
+  transform: scale(1.05);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .mode-selector {
+    padding: 6px 12px;
+  }
+  
+  .input-wrapper {
+    padding: 8px 12px;
+  }
+  
+  .brain-icon {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .send-button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .chat-message.error {
+    background-color: rgba(var(--ion-color-danger-rgb), 0.2);
+  }
+  
+  .message-preview {
+    background-color: var(--ion-color-dark);
+    border-top-color: var(--ion-color-dark-shade);
+  }
+  
+  .image-placeholder {
+    background-color: var(--ion-color-dark);
+  }
+}
+
+/* Animation keyframes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.chat-message {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.chat-message.optimistic {
+  animation: pulse 2s infinite;
+}
+
+/* Accessibility improvements */
+.send-button:focus {
+  outline: 2px solid var(--ion-color-primary);
+  outline-offset: 2px;
+}
+
+.mode-selector ion-chip:focus {
+  outline: 2px solid var(--ion-color-primary);
+  outline-offset: 2px;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .chat-message,
+  .chat-message.optimistic,
+  .chat-input,
+  .send-button,
+  .brain-icon,
+  .chat-image {
+    animation: none;
+    transition: none;
+  }
+  
+  .send-button:not([disabled]):hover,
+  .brain-icon:hover,
+  .chat-image:hover {
+    transform: none;
+  }
+}

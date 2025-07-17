@@ -36,7 +36,7 @@ def upgrade() -> None:
     sa.Column('hashed_password', sa.String(length=255), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('machine_name', sa.String(length=100), nullable=True),
-    sa.Column('contradiction_tolerance', sa.Integer(), nullable=True),
+    sa.Column('contradiction_tolerance', sa.Float(), nullable=True),
     sa.Column('belief_sensitivity', sa.String(length=50), nullable=True),
     sa.Column('salience_decay_speed', sa.String(length=50), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=True),

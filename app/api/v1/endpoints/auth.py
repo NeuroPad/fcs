@@ -93,7 +93,10 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)):
         email=user_data.email,
         name=user_data.name,
         hashed_password=hashed_password,
-        is_active=True
+        is_active=True,
+        machine_name=user_data.machine_name,
+        contradiction_tolerance=user_data.contradiction_tolerance,
+        belief_sensitivity=user_data.belief_sensitivity
     )
     db.add(new_user)
     db.commit()
@@ -106,4 +109,4 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)):
         db.add(user_role_assignment)
         db.commit()
     
-    return new_user 
+    return new_user

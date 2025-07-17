@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.session import Base
@@ -15,7 +15,7 @@ class User(Base):
     
     # AI personalization settings
     machine_name = Column(String(100), nullable=True)  # Name given to the AI by the user
-    contradiction_tolerance = Column(Integer, nullable=True)  # User's tolerance for contradictory information
+    contradiction_tolerance = Column(Float, nullable=True)  # User's tolerance for contradictory information
     belief_sensitivity = Column(String(50), nullable=True)  # User's sensitivity to belief challenges (high, moderate, low)
     salience_decay_speed = Column(String(50), default="default", nullable=True)  # Controls how quickly belief salience decays
     
@@ -26,4 +26,4 @@ class User(Base):
     # Relationships
     user_roles = relationship("UserRole", back_populates="user")
     chat_sessions = relationship("ChatSession", back_populates="user")
-    documents = relationship("Document", back_populates="user") 
+    documents = relationship("Document", back_populates="user")

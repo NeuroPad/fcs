@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import os
 from pathlib import Path
+from typing import Optional
 
 ROOT_DIR = Path().absolute()
 
@@ -9,27 +10,27 @@ MODELS_DIR = Path(os.path.dirname(os.path.abspath(__file__))).parent.parent / "m
 
 class Settings(BaseSettings):
     # Database settings
-    DATABASE_URL: str = "sqlite:///./memduo.db"
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./memduo.db")
     
     # Neo4J settings
-    NEO4J_URI: str = "bolt://localhost:7687"
-    NEO4J_USERNAME: str = "neo4j"
-    NEO4J_PASSWORD: str = ""
+    NEO4J_URI: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    NEO4J_USERNAME: str = os.getenv("NEO4J_USERNAME", "neo4j")
+    NEO4J_PASSWORD: str = os.getenv("NEO4J_PASSWORD", "password")
     
     # OpenAI settings
-    OPENAI_API_KEY: str = ""
+    OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
     
     # Security settings
-    SECRET_KEY: str = "your-secret-key-change-in-production"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))
     
     # Pinecone settings for RAG
-    PINECONE_API_KEY: str = ""
-    PINECONE_ENVIRONMENT: str = "gcp-starter"
+    PINECONE_API_KEY: Optional[str] = os.getenv("PINECONE_API_KEY")
+    PINECONE_ENVIRONMENT: str = os.getenv("PINECONE_ENVIRONMENT", "gcp-starter")
     
     # Directory paths
-    UPLOAD_DIR: Path = ROOT_DIR / "uploads"
+    UPLOAD_DIR: Path = Path(os.getenv("UPLOAD_DIR", "uploads"))
     CHAT_IMAGES_DIR: Path = ROOT_DIR / "chat_images"
     CHROMA_DB_DIR: Path = ROOT_DIR / "chroma_db"
     MODELS_DIR: Path = MODELS_DIR  
@@ -37,7 +38,10 @@ class Settings(BaseSettings):
     # For backward compatibility
     PROCESSED_FILES_DIR: Path = ROOT_DIR / "uploads"
 
+    # MinerU API
+    MINERU_API_TOKEN: Optional[str] = os.getenv("MINERU_API_TOKEN")
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
-settings = Settings() 
+settings = Settings()

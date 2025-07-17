@@ -1,8 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query, status, BackgroundTasks
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 import json
 import logging
+import json
+import hashlib
+import time
+from datetime import datetime
+from functools import wraps
 
 from app.db.session import get_db
 from app.core.config import settings
@@ -14,7 +20,49 @@ from app.services.auth.auth_service import get_user_from_token
 from app.services.rag_service import RAGService
 
 logger = logging.getLogger(__name__)
+
+# Performance monitoring decorator
+def monitor_performance(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        start_time = time.time()
+        try:
+            result = await func(*args, **kwargs)
+            duration = time.time() - start_time
+            logger.info(f"{func.__name__} completed in {duration:.2f}s")
+            return result
+        except Exception as e:
+            duration = time.time() - start_time
+            logger.error(f"{func.__name__} failed after {duration:.2f}s: {e}")
+            raise
+    return wrapper
+
+# Import Redis cache service
+from app.services.cache_service import chat_cache
+
 router = APIRouter()
+
+@router.get("/health")
+async def health_check():
+    """Health check endpoint with performance metrics"""
+    try:
+        cache_stats = chat_cache.get_stats()
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "cache": cache_stats,
+            "performance": {
+                "cache_enabled": cache_stats.get("status") == "connected",
+                "optimizations_active": True
+            }
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "degraded",
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e)
+        }
 
 
 async def get_base_url(request: Request) -> str:
@@ -144,10 +192,12 @@ async def add_message_to_chat(
 
 
 @router.post("/session/{session_id}/ask")
+@monitor_performance
 async def ask_question(
     session_id: int,
     request: QuestionRequest,
-    mode: str = Query("normal", enum=["normal", "graph", "combined"]),
+    background_tasks: BackgroundTasks,
+    mode: str = Query("normal", description="Query mode: normal, graph, or combined"),
     db: Session = Depends(get_db),
     current_request: Request = None
 ):
@@ -163,7 +213,13 @@ async def ask_question(
         if error:
             raise HTTPException(status_code=401 if error == "Invalid token" else 404, detail=error)
         
-        # Get the session
+        # Check cache first
+        cached_response = chat_cache.get_chat_response(request.text, user.id, mode)
+        if cached_response:
+            logger.info(f"Cache hit for user {user.id}, query: {request.text[:50]}...")
+            return cached_response
+        
+        # Get the session with optimized query
         session = chat_service.get_chat_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Chat session not found")
@@ -172,9 +228,10 @@ async def ask_question(
         if session.user_id != user.id:
             raise HTTPException(status_code=403, detail="Not authorized to access this chat session")
         
-        # Get chat history for context
+        # Get chat history for context (limit to last 10 messages for performance)
         chat_history = []
-        for msg in session.messages:
+        recent_messages = sorted(session.messages, key=lambda x: x.created_at)[-10:]
+        for msg in recent_messages:
             chat_history.append({
                 "role": msg.role,
                 "content": msg.content,
@@ -252,7 +309,11 @@ async def ask_question(
             nodes_referenced=nodes_referenced
         )
         
-        return {"status": "success", "response": response_content}
+        # Cache the response
+        response_data = {"status": "success", "response": response_content}
+        chat_cache.set_chat_response(request.text, user.id, mode, response_data)
+        
+        return response_data
         
     except Exception as e:
         logger.error(f"Error in ask_question: {str(e)}")
@@ -267,4 +328,4 @@ async def delete_chat_session(session_id: int, db: Session = Depends(get_db)):
         return {"status": "success", "message": "Chat session deleted"}
     except Exception as e:
         logger.error(f"Error deleting chat session: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))

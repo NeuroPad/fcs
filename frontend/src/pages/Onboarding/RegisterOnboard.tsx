@@ -144,7 +144,7 @@ const RegisterOnboard = () => {
 
         const result = await dispatch(registerUser(profile)).unwrap();
         if (result) {
-          history.push('/onboarding');
+          history.push('/login');
         }
       } catch (error) {
         console.error('Registration failed:', error);

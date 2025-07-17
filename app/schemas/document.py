@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -6,11 +6,36 @@ from datetime import datetime
 class DocumentBase(BaseModel):
     filename: str
     content_type: str
+    file_path: str
+    markdown_path: Optional[str] = None
     file_size: int
+    status: str
+    is_indexed: bool = False
+    error_message: Optional[str] = None
 
 
 class DocumentCreate(DocumentBase):
-    file_path: str
+    user_id: int
+
+
+class DocumentResponse(DocumentBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    processed_at: Optional[datetime] = None
+    indexed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+
+
+class DocumentList(BaseModel):
+    documents: List[DocumentResponse]
+    count: int
+    total_size: int
 
 
 class DocumentUpdate(BaseModel):
@@ -40,4 +65,4 @@ class DocumentInDBBase(DocumentBase):
 
 
 class Document(DocumentInDBBase):
-    pass 
+    pass

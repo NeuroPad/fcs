@@ -11,7 +11,7 @@ from app.models.document import Document
 from app.models.user import User
 from app.services.document_service import DocumentService
 from app.services.auth.auth_service import get_current_active_user
-from app.schemas.upload import DocumentResponse, DocumentList
+from app.schemas.document import DocumentResponse, DocumentList
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -37,9 +37,18 @@ async def upload_file(
             # If it's a PDF, queue it for processing
             if document.content_type.endswith("/pdf"):
                 # Queue the PDF for processing
-                await document_service.queue_pdf_processing(document.id)
-                # Update status immediately for response, actual processing happens later
-                document.status = "processing"
+                result = await document_service.queue_pdf_processing(document.id)
+                if result["status"] == "queued":
+                    # Update status immediately for response, actual processing happens later
+                    document.status = "processing"
+                elif result["status"] == "warning":
+                    # MinerU not available, mark as uploaded but not processed
+                    document.status = "uploaded"
+                    document.error_message = result["message"]
+                else:
+                    # Error occurred
+                    document.status = "failed"
+                    document.error_message = result["message"]
                 db.commit()
                 db.refresh(document)
             else:
@@ -62,8 +71,29 @@ async def get_documents(
     try:
         documents = await document_service.get_user_documents(current_user.id, db)
         total_size = sum(doc.file_size for doc in documents)
+        
+        # Convert datetime objects to strings
+        doc_list = []
+        for doc in documents:
+            doc_dict = {
+                "id": doc.id,
+                "user_id": doc.user_id,
+                "filename": doc.filename,
+                "content_type": doc.content_type,
+                "file_path": doc.file_path,
+                "markdown_path": doc.markdown_path,
+                "file_size": doc.file_size,
+                "status": doc.status,
+                "is_indexed": doc.is_indexed,
+                "error_message": doc.error_message,
+                "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                "processed_at": doc.processed_at.isoformat() if doc.processed_at else None,
+                "indexed_at": doc.indexed_at.isoformat() if doc.indexed_at else None
+            }
+            doc_list.append(doc_dict)
+            
         return {
-            "documents": documents,
+            "documents": doc_list,
             "count": len(documents),
             "total_size": total_size
         }
@@ -102,8 +132,23 @@ async def get_document(
 ):
     """Get a specific document"""
     try:
-        document = await document_service.get_document(document_id, current_user.id, db)
-        return document
+        doc = await document_service.get_document(document_id, current_user.id, db)
+        # Convert datetime objects to strings
+        return {
+            "id": doc.id,
+            "user_id": doc.user_id,
+            "filename": doc.filename,
+            "content_type": doc.content_type,
+            "file_path": doc.file_path,
+            "markdown_path": doc.markdown_path,
+            "file_size": doc.file_size,
+            "status": doc.status,
+            "is_indexed": doc.is_indexed,
+            "error_message": doc.error_message,
+            "created_at": doc.created_at.isoformat() if doc.created_at else None,
+            "processed_at": doc.processed_at.isoformat() if doc.processed_at else None,
+            "indexed_at": doc.indexed_at.isoformat() if doc.indexed_at else None
+        }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -219,4 +264,4 @@ async def delete_document(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error deleting document {document_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
