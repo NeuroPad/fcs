@@ -14,6 +14,17 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Backup .env file on AWS EC2
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.AWS_HOST }}
+        username: ${{ secrets.AWS_USER }}
+        key: ${{ secrets.AWS_SSH_KEY }}
+        script: |
+          if [ -f "/home/${{ secrets.AWS_USER }}/memduo/.env" ]; then
+            cp /home/${{ secrets.AWS_USER }}/memduo/.env /tmp/.env.backup
+          fi
+
     - name: Copy code to AWS EC2
       uses: appleboy/scp-action@v0.1.7
       with:
@@ -24,6 +35,17 @@ jobs:
         target: "/home/${{ secrets.AWS_USER }}/memduo"
         rm: true
 
+    - name: Restore .env file on AWS EC2
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.AWS_HOST }}
+        username: ${{ secrets.AWS_USER }}
+        key: ${{ secrets.AWS_SSH_KEY }}
+        script: |
+          if [ -f "/tmp/.env.backup" ]; then
+            mv /tmp/.env.backup /home/${{ secrets.AWS_USER }}/memduo/.env
+          fi
+
     - name: Deploy with Docker Compose on AWS EC2
       uses: appleboy/ssh-action@v1.0.3
       with:
@@ -32,6 +54,12 @@ jobs:
         key: ${{ secrets.AWS_SSH_KEY }}
         script: |
           cd /home/${{ secrets.AWS_USER }}/memduo
+          
+          # Check if .env file exists
+          if [ ! -f ".env" ]; then
+            echo "Error: .env file not found. Please create it manually on the server."
+            exit 1
+          fi
           
           # Stop existing containers
           docker compose down || true
