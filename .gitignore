@@ -47,3 +47,5 @@ memduo.db
 /fcs_docs
 /graphiti_docs
 /llama_index_agent_flow_docs
+
+openrank-t3m-key.pem
