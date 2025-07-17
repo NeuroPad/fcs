@@ -14,37 +14,31 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Backup .env file on AWS EC2
+    - name: Deploy code to AWS EC2 using Git
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.AWS_HOST }}
         username: ${{ secrets.AWS_USER }}
         key: ${{ secrets.AWS_SSH_KEY }}
         script: |
-          if [ -f "/home/${{ secrets.AWS_USER }}/memduo/.env" ]; then
-            cp /home/${{ secrets.AWS_USER }}/memduo/.env /tmp/.env.backup
+          # Create project directory if it doesn't exist
+          mkdir -p /home/${{ secrets.AWS_USER }}/memduo
+          cd /home/${{ secrets.AWS_USER }}/memduo
+          
+          # Initialize git repo if it doesn't exist
+          if [ ! -d ".git" ]; then
+            git init
+            git remote add origin https://github.com/${{ github.repository }}.git
           fi
-
-    - name: Copy code to AWS EC2
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.AWS_HOST }}
-        username: ${{ secrets.AWS_USER }}
-        key: ${{ secrets.AWS_SSH_KEY }}
-        source: "."
-        target: "/home/${{ secrets.AWS_USER }}/memduo"
-        rm: true
-
-    - name: Restore .env file on AWS EC2
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.AWS_HOST }}
-        username: ${{ secrets.AWS_USER }}
-        key: ${{ secrets.AWS_SSH_KEY }}
-        script: |
-          if [ -f "/tmp/.env.backup" ]; then
-            mv /tmp/.env.backup /home/${{ secrets.AWS_USER }}/memduo/.env
-          fi
+          
+          # Fetch latest changes
+          git fetch origin
+          
+          # Reset to latest commit (preserves untracked files like .env, logs, uploads)
+          git reset --hard origin/${{ github.ref_name }}
+          
+          # Clean only tracked files, preserve untracked files
+          git clean -fd --exclude='.env' --exclude='logs/' --exclude='uploads/' --exclude='chroma_db/' --exclude='*.log'
 
     - name: Deploy with Docker Compose on AWS EC2
       uses: appleboy/ssh-action@v1.0.3
