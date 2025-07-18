@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import logging
 import asyncio
+import json
 from pathlib import Path
 
 from app.core.config import settings
@@ -22,6 +23,39 @@ router = APIRouter()
 document_service = DocumentService(upload_dir=settings.UPLOAD_DIR)
 rag_service = RAGService()
 
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+        self.user_connections: dict = {}  # user_id -> [websockets]
+    
+    async def connect(self, websocket: WebSocket, user_id: int):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        if user_id not in self.user_connections:
+            self.user_connections[user_id] = []
+        self.user_connections[user_id].append(websocket)
+    
+    def disconnect(self, websocket: WebSocket, user_id: int):
+        self.active_connections.remove(websocket)
+        if user_id in self.user_connections:
+            self.user_connections[user_id].remove(websocket)
+            if not self.user_connections[user_id]:
+                del self.user_connections[user_id]
+    
+    async def send_personal_message(self, message: str, user_id: int):
+        if user_id in self.user_connections:
+            for connection in self.user_connections[user_id]:
+                try:
+                    await connection.send_text(message)
+                except:
+                    # Remove broken connections
+                    self.user_connections[user_id].remove(connection)
+                    if connection in self.active_connections:
+                        self.active_connections.remove(connection)
+
+manager = ConnectionManager()
+
 
 async def process_and_index_document(document_id: int, user_id: int):
     """Unified background task to process and index a document"""
@@ -39,9 +73,23 @@ async def process_and_index_document(document_id: int, user_id: int):
             logger.error(f"Document {document_id} not found for user {user_id}")
             return
         
+        # Helper function to broadcast status updates
+        async def broadcast_status(status: str, message: str = ""):
+            status_update = {
+                "type": "document_status_update",
+                "document_id": document_id,
+                "filename": document.filename,
+                "status": status,
+                "message": message,
+                "is_indexed": document.is_indexed
+            }
+            await manager.send_personal_message(json.dumps(status_update), user_id)
+        
         # If it's a PDF, process it first
         if document.content_type.endswith("/pdf"):
             logger.info(f"Processing PDF document {document_id}: {document.filename}")
+            await broadcast_status("processing", "Processing PDF document...")
+            
             result = await document_service.queue_pdf_processing(document.id)
             
             if result["status"] == "queued":
@@ -61,34 +109,56 @@ async def process_and_index_document(document_id: int, user_id: int):
                     
                     if document.status == "completed":
                         logger.info(f"PDF processing completed for document {document_id}")
+                        await broadcast_status("processing", "PDF processing completed, starting indexing...")
                         break
                     elif document.status == "failed":
                         logger.error(f"PDF processing failed for document {document_id}: {document.error_message}")
+                        await broadcast_status("failed", f"PDF processing failed: {document.error_message}")
                         return
                 
                 if document.status != "completed":
                     logger.warning(f"PDF processing timed out for document {document_id}")
+                    await broadcast_status("processing", "PDF processing timed out, continuing with indexing...")
                     # Continue with indexing anyway, using the original file
             elif result["status"] == "warning":
                 logger.warning(f"MinerU not available for document {document_id}: {result['message']}")
+                await broadcast_status("processing", "PDF processor unavailable, using fallback...")
                 # Continue with indexing the original file
             else:
                 logger.error(f"PDF processing failed for document {document_id}: {result['message']}")
+                await broadcast_status("processing", "PDF processing failed, continuing with indexing...")
                 # Continue with indexing anyway
         
         # Index the document in RAG system
         logger.info(f"Indexing document {document_id} in RAG system")
+        await broadcast_status("processing", "Indexing document in knowledge base...")
+        
         rag_result = await rag_service.process_document(document_id, db)
         
         if rag_result["status"] == "success":
             logger.info(f"Successfully indexed document {document_id}: {document.filename}")
+            await broadcast_status("completed", "Document successfully processed and indexed")
         else:
             logger.error(f"Failed to index document {document_id}: {rag_result['message']}")
+            await broadcast_status("failed", f"Indexing failed: {rag_result['message']}")
             
     except Exception as e:
         logger.error(f"Error in unified document processing for document {document_id}: {str(e)}")
+        # Try to broadcast error status
+        try:
+            error_update = {
+                "type": "document_status_update",
+                "document_id": document_id,
+                "status": "error",
+                "message": f"Processing error: {str(e)}",
+                "is_indexed": False
+            }
+            await manager.send_personal_message(json.dumps(error_update), user_id)
+        except:
+            pass  # Don't fail if WebSocket broadcast fails
     finally:
         db.close()
+
 
 @router.post("/upload", response_model=List[DocumentResponse])
 async def upload_file(
@@ -125,6 +195,7 @@ async def upload_file(
     except Exception as e:
         logger.error(f"Error uploading files: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/", response_model=DocumentList)
 async def get_documents(
@@ -327,3 +398,53 @@ async def delete_document(
     except Exception as e:
         logger.error(f"Error deleting document {document_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.websocket("/ws/status")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    token: str = None
+):
+    """WebSocket endpoint for real-time document status updates"""
+    try:
+        # Authenticate user using token from query parameter
+        from app.services.auth.auth_service import get_current_user_from_token
+        from app.db.session import get_db
+        
+        if not token:
+            await websocket.close(code=1008, reason="Authentication token required")
+            return
+            
+        # Get database session
+        db_gen = get_db()
+        db = next(db_gen)
+        
+        try:
+            current_user = get_current_user_from_token(db, token)
+            if not current_user:
+                await websocket.close(code=1008, reason="Invalid authentication token")
+                return
+        except Exception as e:
+            await websocket.close(code=1008, reason="Authentication failed")
+            return
+        finally:
+            db.close()
+        
+        await manager.connect(websocket, current_user.id)
+        
+        try:
+            while True:
+                # Keep the connection alive
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            manager.disconnect(websocket, current_user.id)
+        except Exception as e:
+            logger.error(f"WebSocket error for user {current_user.id}: {str(e)}")
+            manager.disconnect(websocket, current_user.id)
+            
+    except Exception as e:
+        logger.error(f"WebSocket connection error: {str(e)}")
+        try:
+            await websocket.close(code=1011, reason="Internal server error")
+        except:
+            pass
