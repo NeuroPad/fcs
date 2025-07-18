@@ -271,6 +271,7 @@ const KnowledgeBaseManagement: React.FC = () => {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await get("token")}`
         }
       });
 
@@ -301,6 +302,7 @@ const KnowledgeBaseManagement: React.FC = () => {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await get("token")}`
         },
       });
 

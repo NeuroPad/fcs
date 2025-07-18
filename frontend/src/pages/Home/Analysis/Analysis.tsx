@@ -60,7 +60,14 @@ export default function Analysis() {
   const fetchGraphStats = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/rag/graph/stats`);
+      const response = await fetch(`${API_BASE_URL}/rag/graph/stats`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await get("token")}`
+        }
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch graph statistics');
       }

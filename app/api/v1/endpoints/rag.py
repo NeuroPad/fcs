@@ -32,7 +32,7 @@ async def index_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Index a specific document in the RAG system"""
+    """Index a specific document in the RAG system (manual re-indexing)"""
     try:
         # Get document from database
         document = db.query(Document).filter(
@@ -44,7 +44,7 @@ async def index_document(
             raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
         
         # Add document processing to background tasks
-        background_tasks.add_task(rag_service.process_document, document.id)
+        background_tasks.add_task(rag_service.process_document, document.id, db)
         
         return JSONResponse(content={
             "status": "processing",
@@ -55,20 +55,47 @@ async def index_document(
         logger.error(f"Error indexing document {document_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/process-pending")
 async def process_pending_documents(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Process all pending documents in the database"""
+    """Process and index all pending documents in the database (unified workflow)"""
     try:
-        # Add processing to background tasks
-        background_tasks.add_task(rag_service.process_pending_documents, db)
+        # Import the unified processing function
+        from app.api.v1.endpoints.documents import process_and_index_document
+        
+        # Get all documents that need processing or indexing
+        from app.models.document import Document
+        pending_documents = db.query(Document).filter(
+            Document.user_id == current_user.id,
+            (Document.is_indexed == False) | (Document.status.in_(["pending", "uploaded"]))
+        ).all()
+        
+        if not pending_documents:
+            return JSONResponse(content={
+                "status": "success",
+                "message": "No pending documents to process"
+            })
+        
+        # Queue each document for unified processing
+        for document in pending_documents:
+            background_tasks.add_task(
+                process_and_index_document,
+                document.id,
+                current_user.id
+            )
+            # Update status
+            document.status = "processing"
+        
+        db.commit()
         
         return JSONResponse(content={
             "status": "processing",
-            "message": "Processing pending documents in the background"
+            "message": f"Processing and indexing {len(pending_documents)} pending documents in the background",
+            "queued_count": len(pending_documents)
         })
     except Exception as e:
         logger.error(f"Error processing pending documents: {str(e)}")
@@ -111,8 +138,11 @@ async def delete_document_from_index(
 # ============= GRAPH RAG ENDPOINTS =============
 
 @router.post("/graph/process-documents")
-async def process_all_documents_graph(background_tasks: BackgroundTasks):
-    """Process all documents into the knowledge graph"""
+async def process_all_documents_graph(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Process all documents into the knowledge graph for the current user"""
     try:
         # Add the processing task to background tasks
         background_tasks.add_task(graph_rag_service.process_documents)
@@ -125,8 +155,11 @@ async def process_all_documents_graph(background_tasks: BackgroundTasks):
 
 
 @router.post("/graph/similar/")
-async def get_similar_nodes(question: Question):
-    """Get similar nodes from the knowledge graph."""
+async def get_similar_nodes(
+    question: Question,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get similar nodes from the knowledge graph for the current user."""
     try:
         nodes = await graph_rag_service.get_similar_nodes(question.text)
         return {"similar_nodes": nodes}
@@ -135,8 +168,11 @@ async def get_similar_nodes(question: Question):
 
 
 @router.post("/graph/ask/", response_model=ExtendedGraphRAGResponse)
-async def ask_graph_question(question: Question):
-    """Ask a question and get a response using GraphRAG."""
+async def ask_graph_question(
+    question: Question,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Ask a question and get a response using GraphRAG for the current user."""
     try:
         response = await graph_rag_service.get_answer(question.text)
         return response
@@ -145,20 +181,24 @@ async def ask_graph_question(question: Question):
 
 
 @router.get("/graph/stats")
-async def get_graph_stats():
-    """Get statistics about the knowledge graph"""
+async def get_graph_stats(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get statistics about the knowledge graph for the current user"""
     try:
-        stats = await graph_rag_service.get_graph_stats()
+        stats = await graph_rag_service.get_graph_stats(user_id=current_user.id)
         return JSONResponse(content=stats)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/graph/relationships")
-async def get_graph_relationships():
-    """Get all relationships from the knowledge graph"""
+async def get_graph_relationships(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get all relationships from the knowledge graph for the current user"""
     try:
-        relationships = await graph_rag_service.get_relationships()
+        relationships = await graph_rag_service.get_relationships(user_id=current_user.id)
         return JSONResponse(content=relationships)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -258,4 +298,4 @@ async def combined_query(
 @router.get("/")
 def get_rag_info():
     """Placeholder endpoint - to be implemented."""
-    return {"message": "RAG endpoints will be moved here"} 
+    return {"message": "RAG endpoints will be moved here"}
