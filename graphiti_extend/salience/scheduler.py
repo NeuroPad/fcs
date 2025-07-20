@@ -245,4 +245,4 @@ def setup_salience_scheduler(
     )
     
     scheduler.setup_scheduler(app)
-    return scheduler 
+    return scheduler

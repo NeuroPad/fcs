@@ -317,7 +317,30 @@ async def ask_question(
         
     except Exception as e:
         logger.error(f"Error in ask_question: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        
+        # Handle specific API errors gracefully
+        error_message = str(e)
+        if "insufficient_quota" in error_message.lower() or "quota" in error_message.lower():
+            raise HTTPException(
+                status_code=503, 
+                detail="The AI service is temporarily unavailable. Please try again later."
+            )
+        elif "rate_limit" in error_message.lower() or "rate limit" in error_message.lower():
+            raise HTTPException(
+                status_code=429, 
+                detail="Too many requests. Please wait a moment before trying again."
+            )
+        elif "timeout" in error_message.lower():
+            raise HTTPException(
+                status_code=408, 
+                detail="Request timeout. Please try again."
+            )
+        else:
+            # Generic error for other cases
+            raise HTTPException(
+                status_code=500, 
+                detail="An unexpected error occurred. Please try again later."
+            )
 
 
 @router.delete("/session/{session_id}")

@@ -151,4 +151,4 @@ async def demo_salience_logging():
 
 
 if __name__ == "__main__":
-    asyncio.run(demo_salience_logging()) 
+    asyncio.run(demo_salience_logging())

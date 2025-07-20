@@ -114,7 +114,26 @@ async def query_documents(
         return JSONResponse(content=result)
     except Exception as e:
         logger.error(f"Query error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        
+        # Handle specific API errors gracefully
+        error_message = str(e)
+        if "insufficient_quota" in error_message.lower() or "quota" in error_message.lower():
+            raise HTTPException(
+                status_code=503, 
+                detail="The AI service is temporarily unavailable. Please try again later."
+            )
+        elif "rate_limit" in error_message.lower() or "rate limit" in error_message.lower():
+            raise HTTPException(
+                status_code=429, 
+                detail="Too many requests. Please wait a moment before trying again."
+            )
+        elif "timeout" in error_message.lower():
+            raise HTTPException(
+                status_code=408, 
+                detail="Request timeout. Please try again."
+            )
+        else:
+            raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
 
 @router.delete("/document/{document_id}")
 async def delete_document_from_index(
@@ -178,6 +197,28 @@ async def ask_graph_question(
         return response
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error(f"Graph question error: {str(e)}")
+        
+        # Handle specific API errors gracefully
+        error_message = str(e)
+        if "insufficient_quota" in error_message.lower() or "quota" in error_message.lower():
+            raise HTTPException(
+                status_code=503, 
+                detail="The AI service is temporarily unavailable. Please try again later."
+            )
+        elif "rate_limit" in error_message.lower() or "rate limit" in error_message.lower():
+            raise HTTPException(
+                status_code=429, 
+                detail="Too many requests. Please wait a moment before trying again."
+            )
+        elif "timeout" in error_message.lower():
+            raise HTTPException(
+                status_code=408, 
+                detail="Request timeout. Please try again."
+            )
+        else:
+            raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
 
 
 @router.get("/graph/stats")
@@ -293,7 +334,26 @@ async def combined_query(
         return JSONResponse(content=results)
     except Exception as e:
         logger.error(f"Combined query error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        
+        # Handle specific API errors gracefully
+        error_message = str(e)
+        if "insufficient_quota" in error_message.lower() or "quota" in error_message.lower():
+            raise HTTPException(
+                status_code=503, 
+                detail="The AI service is temporarily unavailable. Please try again later."
+            )
+        elif "rate_limit" in error_message.lower() or "rate limit" in error_message.lower():
+            raise HTTPException(
+                status_code=429, 
+                detail="Too many requests. Please wait a moment before trying again."
+            )
+        elif "timeout" in error_message.lower():
+            raise HTTPException(
+                status_code=408, 
+                detail="Request timeout. Please try again."
+            )
+        else:
+            raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
 
 @router.get("/")
 def get_rag_info():

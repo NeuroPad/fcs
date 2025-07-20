@@ -94,7 +94,19 @@ export const sendMessageOptimistic = createAsyncThunk(
       clearTimeout(timeoutId);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || `HTTP error! status: ${response.status}`;
+        
+        // Handle specific error types
+        if (response.status === 503) {
+          throw new Error("The AI service is temporarily unavailable. Please try again later.");
+        } else if (response.status === 429) {
+          throw new Error("Too many requests. Please wait a moment before trying again.");
+        } else if (response.status === 408) {
+          throw new Error("Request timeout. Please try again.");
+        } else {
+          throw new Error(errorMessage);
+        }
       }
       
       // Get updated session data

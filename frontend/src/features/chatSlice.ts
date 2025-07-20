@@ -81,7 +81,18 @@ export const createChat = createAsyncThunk(
         sessionId: sessionId,
       };
     } catch (error: any) {
-      throw error.response?.data?.detail || 'An error occurred';
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to create chat';
+      
+      // Handle specific error types
+      if (error.response?.status === 503) {
+        throw "The AI service is temporarily unavailable. Please try again later.";
+      } else if (error.response?.status === 429) {
+        throw "Too many requests. Please wait a moment before trying again.";
+      } else if (error.response?.status === 408) {
+        throw "Request timeout. Please try again.";
+      } else {
+        throw errorMessage;
+      }
     }
   }
 );
