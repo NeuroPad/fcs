@@ -64,7 +64,8 @@ export const createChat = createAsyncThunk(
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const sessionId = newSessionResponse.data.id;
-      await fetch(`${API_BASE_URL}/chat/session/${sessionId}/ask?mode=${mode}`, {
+      
+      const askResponse = await fetch(`${API_BASE_URL}/chat/session/${sessionId}/ask?mode=${mode}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -72,11 +73,37 @@ export const createChat = createAsyncThunk(
         },
         body: JSON.stringify({ text: question }),
       });
-      const sessionResponse = await axios.get(`${BASE_URL}/session/${sessionId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      
+      const askData = await askResponse.json();
+      
+      // Parse the response content to extract answer, sources, and reasoning_nodes
+      let assistantMessage: ChatMessage;
+      try {
+        const responseContent = JSON.parse(askData.response);
+        assistantMessage = {
+          role: 'assistant',
+          content: responseContent.answer || 'No response received',
+          sources: responseContent.sources || [],
+          reasoning_nodes: responseContent.reasoning_nodes || []
+        };
+      } catch (parseError) {
+        // Fallback if response parsing fails
+        assistantMessage = {
+          role: 'assistant',
+          content: askData.response || 'No response received',
+          sources: [],
+          reasoning_nodes: []
+        };
+      }
+      
+      // Create user message
+      const userMessage: ChatMessage = {
+        role: 'user',
+        content: question
+      };
+      
       return {
-        messages: sessionResponse.data.messages,
+        messages: [userMessage, assistantMessage],
         chatId: sessionId,
         sessionId: sessionId,
       };
@@ -132,7 +159,7 @@ export const sendMessage = createAsyncThunk(
   async ({ sessionId, message, mode }: SendMessagePayload) => {
     try {
       const token = await get('token');
-      await fetch(`${API_BASE_URL}/chat/session/${sessionId}/ask?mode=${mode}`, {
+      const askResponse = await fetch(`${API_BASE_URL}/chat/session/${sessionId}/ask?mode=${mode}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,10 +167,33 @@ export const sendMessage = createAsyncThunk(
         },
         body: JSON.stringify({ text: message }),
       });
-      const sessionResponse = await axios.get(`${BASE_URL}/session/${sessionId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return sessionResponse.data;
+      
+      const askData = await askResponse.json();
+      
+      // Parse the response content to extract answer, sources, and reasoning_nodes
+      let assistantMessage: ChatMessage;
+      try {
+        const responseContent = JSON.parse(askData.response);
+        assistantMessage = {
+          role: 'assistant',
+          content: responseContent.answer || 'No response received',
+          sources: responseContent.sources || [],
+          reasoning_nodes: responseContent.reasoning_nodes || []
+        };
+      } catch (parseError) {
+        // Fallback if response parsing fails
+        assistantMessage = {
+          role: 'assistant',
+          content: askData.response || 'No response received',
+          sources: [],
+          reasoning_nodes: []
+        };
+      }
+      
+      return {
+        newMessage: assistantMessage,
+        sessionId: sessionId
+      };
     } catch (error: any) {
       throw error.response?.data?.detail || 'An error occurred';
     }
@@ -186,7 +236,15 @@ export const chatSlice = createSlice({
   extraReducers(builder) {
     builder
       .addCase(createChat.fulfilled, (state, action) => {
-        state.selectedChat = action.payload.messages;
+        // For new chats, if there's already a user message in state, append only the assistant message
+        // Otherwise, use all messages from the response
+        if (state.selectedChat.length > 0 && state.selectedChat[state.selectedChat.length - 1].role === 'user') {
+          // Only add the assistant message (second message in the response)
+          state.selectedChat = [...state.selectedChat, action.payload.messages[1]];
+        } else {
+          // Use all messages from the response
+          state.selectedChat = action.payload.messages;
+        }
         state.chatId = action.payload.chatId;
         state.error = null;
       })
@@ -206,7 +264,7 @@ export const chatSlice = createSlice({
       })
 
       .addCase(getChatById.fulfilled, (state, action) => {
-        state.selectedChat = action.payload.messages;
+        state.selectedChat = action.payload.messages || [];
         state.chatId = action.payload.id;
         state.error = null;
       })
@@ -216,7 +274,15 @@ export const chatSlice = createSlice({
       })
 
       .addCase(sendMessage.fulfilled, (state, action) => {
-        state.selectedChat = action.payload.messages;
+        // Add the user message first if it's not already there
+        const lastMessage = state.selectedChat[state.selectedChat.length - 1];
+        if (!lastMessage || lastMessage.role !== 'user') {
+          // This shouldn't happen with current flow, but adding as safety
+          state.selectedChat = [...state.selectedChat, action.payload.newMessage];
+        } else {
+          // User message is already there, just add the assistant message
+          state.selectedChat = [...state.selectedChat, action.payload.newMessage];
+        }
         state.error = null;
       })
       .addCase(sendMessage.rejected, (state, action) => {

@@ -46,6 +46,18 @@
 .chat-message.error {
   border-left: 3px solid var(--ion-color-danger);
   background-color: rgba(var(--ion-color-danger-rgb), 0.1);
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.error-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .error-actions {
