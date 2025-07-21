@@ -23,7 +23,7 @@ from neo4j import AsyncDriver
 from graphiti_core.nodes import EntityNode
 from graphiti_core.edges import EntityEdge
 from graphiti_core.utils.datetime_utils import utc_now
-from graphiti_core.helpers import DEFAULT_DATABASE
+
 
 logger = logging.getLogger(__name__)
 
@@ -513,7 +513,6 @@ class SalienceManager:
         records, _, _ = await self.driver.execute_query(
             query,
             params={"node_uuid": node_uuid, "group_ids": group_ids},
-            database_=DEFAULT_DATABASE,
             routing_='r'
         )
         
@@ -546,7 +545,6 @@ class SalienceManager:
         node_records, _, _ = await self.driver.execute_query(
             get_nodes_query,
             params={"uuids": list(reinforcement_map.keys())},
-            database_=DEFAULT_DATABASE,
             routing_='r'
         )
         
@@ -594,8 +592,7 @@ class SalienceManager:
         
         updated_records, _, _ = await self.driver.execute_query(
             query,
-            params={"updates": updates},
-            database_=DEFAULT_DATABASE
+            params={"updates": updates}
         )
         
         # Print AFTER state for each updated node
@@ -641,7 +638,6 @@ class SalienceManager:
         records, _, _ = await self.driver.execute_query(
             query,
             params={"node_uuid": node_uuid, "threshold": self.config.HIGH_CONFIDENCE_THRESHOLD},
-            database_=DEFAULT_DATABASE,
             routing_='r'
         )
         
@@ -658,7 +654,6 @@ class SalienceManager:
         records, _, _ = await self.driver.execute_query(
             query,
             params={"node_uuid": node_uuid},
-            database_=DEFAULT_DATABASE,
             routing_='r'
         )
         
@@ -689,7 +684,6 @@ class SalienceManager:
         records, _, _ = await self.driver.execute_query(
             query,
             params={"group_ids": group_ids, "offset": offset, "batch_size": batch_size},
-            database_=DEFAULT_DATABASE,
             routing_='r'
         )
         
@@ -846,8 +840,7 @@ class SalienceManager:
         
         await self.driver.execute_query(
             query,
-            params={"updates": updates},
-            database_=DEFAULT_DATABASE
+            params={"updates": updates}
         )
     
     async def _delete_nodes(self, node_uuids: List[str]) -> None:
@@ -862,8 +855,7 @@ class SalienceManager:
         
         await self.driver.execute_query(
             query,
-            params={"uuids": node_uuids},
-            database_=DEFAULT_DATABASE
+            params={"uuids": node_uuids}
         )
         
         logger.info(f"Deleted {len(node_uuids)} forgotten CognitiveObjects")
@@ -879,7 +871,6 @@ class SalienceManager:
         records, _, _ = await self.driver.execute_query(
             query,
             params={"uuid": uuid},
-            database_=DEFAULT_DATABASE,
             routing_='r'
         )
         
@@ -887,4 +878,4 @@ class SalienceManager:
     
     def _is_cognitive_object(self, node: EntityNode) -> bool:
         """Check if a node is a CognitiveObject."""
-        return 'CognitiveObject' in node.labels 
+        return 'CognitiveObject' in node.labels

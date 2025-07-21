@@ -94,7 +94,19 @@ export const sendMessageOptimistic = createAsyncThunk(
       clearTimeout(timeoutId);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || `HTTP error! status: ${response.status}`;
+        
+        // Handle specific error types
+        if (response.status === 503) {
+          throw new Error("The AI service is temporarily unavailable. Please try again later.");
+        } else if (response.status === 429) {
+          throw new Error("Too many requests. Please wait a moment before trying again.");
+        } else if (response.status === 408) {
+          throw new Error("Request timeout. Please try again.");
+        } else {
+          throw new Error(errorMessage);
+        }
       }
       
       // Get updated session data
@@ -300,6 +312,31 @@ export const optimizedChatSlice = createSlice({
       .addCase(sendMessageOptimistic.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as string;
+        
+        // Find the optimistic message and mark it as an error
+        const optimisticMessageIndex = state.selectedChat.findIndex(msg => msg.isOptimistic);
+        if (optimisticMessageIndex !== -1) {
+          const optimisticMessage = state.selectedChat[optimisticMessageIndex];
+          
+          // Create an error message from the assistant
+          const errorMessage = {
+            id: `error-${Date.now()}`,
+            role: 'assistant',
+            content: state.error || 'An error occurred. Please try again.',
+            created_at: new Date().toISOString(),
+            isError: true,
+            isOptimistic: false
+          };
+          
+          // Replace the optimistic message with the user message and add error message
+          state.selectedChat[optimisticMessageIndex] = {
+            ...optimisticMessage,
+            isOptimistic: false
+          };
+          
+          // Add the error message
+          state.selectedChat.push(errorMessage);
+        }
       })
       
       // Cached chat retrieval

@@ -477,20 +477,37 @@ class GraphRAGService:
         nodes = self.index.as_retriever(similarity_top_k=5).retrieve(question)
         return [node.text for node in nodes]
 
-    async def get_graph_stats(self) -> Dict:
-        """Get statistics about the knowledge graph"""
+
+    async def get_graph_stats(self, user_id: int = None) -> Dict:
+        """Get statistics about the knowledge graph for a specific user"""
         try:
             with self.neo4j_driver.session() as session:
-                # Get all stats in one query
-                result = session.run("""
-                    MATCH (n) 
-                    OPTIONAL MATCH ()-[r]->()
-                    OPTIONAL MATCH (d:Documents)
-                    RETURN 
-                        count(DISTINCT n) as total_nodes,
-                        count(DISTINCT r) as total_relationships,
-                        count(DISTINCT d) as total_documents
-                """)
+                if user_id:
+                    # Get stats filtered by user_id (group_id)
+                    result = session.run("""
+                        MATCH (n) 
+                        WHERE n.group_id = $user_id OR n.group_id IS NULL
+                        OPTIONAL MATCH (n1)-[r]->(n2)
+                        WHERE (n1.group_id = $user_id OR n1.group_id IS NULL) 
+                          AND (n2.group_id = $user_id OR n2.group_id IS NULL)
+                        OPTIONAL MATCH (d:Documents)
+                        WHERE d.group_id = $user_id OR d.group_id IS NULL
+                        RETURN 
+                            count(DISTINCT n) as total_nodes,
+                            count(DISTINCT r) as total_relationships,
+                            count(DISTINCT d) as total_documents
+                    """, user_id=str(user_id))
+                else:
+                    # Get all stats (fallback for backward compatibility)
+                    result = session.run("""
+                        MATCH (n) 
+                        OPTIONAL MATCH ()-[r]->()
+                        OPTIONAL MATCH (d:Documents)
+                        RETURN 
+                            count(DISTINCT n) as total_nodes,
+                            count(DISTINCT r) as total_relationships,
+                            count(DISTINCT d) as total_documents
+                    """)
 
                 stats = result.single()
                 total_nodes = stats["total_nodes"]
@@ -512,35 +529,65 @@ class GraphRAGService:
             logger.error(f"Error getting graph stats: {str(e)}")
             raise
 
-    async def get_relationships(self) -> List[Dict]:
-        """Get relationships from the knowledge graph"""
+
+    async def get_relationships(self, user_id: int = None) -> List[Dict]:
+        """Get relationships from the knowledge graph for a specific user"""
         try:
             with self.neo4j_driver.session() as session:
-                result = session.run("""
-                    MATCH (source)-[r]->(target)
-                    WITH 
-                    id(r) AS id,
-                    source.name AS source_node,
-                    target.name AS target_node,
-                    COALESCE(r.name, type(r)) AS relationship_label,
-                    r.timestamp AS timestamp,
-                    source.confidence AS source_conf,
-                    target.confidence AS target_conf
-                    WITH id, source_node, target_node, relationship_label, timestamp, source_conf, target_conf,
-                        CASE
-                        WHEN source_conf IS NOT NULL AND target_conf IS NOT NULL
-                            THEN (source_conf + target_conf) / 2.0
-                        WHEN source_conf IS NOT NULL
-                            THEN source_conf
-                        WHEN target_conf IS NOT NULL
-                            THEN target_conf
-                        ELSE 0.7
-                        END AS confidence
-                    RETURN *
-                    ORDER BY id
-                    LIMIT 1000
-
-                """)
+                if user_id:
+                    # Get relationships filtered by user_id (group_id)
+                    result = session.run("""
+                        MATCH (source)-[r]->(target)
+                        WHERE (source.group_id = $user_id OR source.group_id IS NULL)
+                          AND (target.group_id = $user_id OR target.group_id IS NULL)
+                        WITH 
+                        id(r) AS id,
+                        source.name AS source_node,
+                        target.name AS target_node,
+                        COALESCE(r.name, type(r)) AS relationship_label,
+                        r.timestamp AS timestamp,
+                        source.confidence AS source_conf,
+                        target.confidence AS target_conf
+                        WITH id, source_node, target_node, relationship_label, timestamp, source_conf, target_conf,
+                            CASE
+                            WHEN source_conf IS NOT NULL AND target_conf IS NOT NULL
+                                THEN (source_conf + target_conf) / 2.0
+                            WHEN source_conf IS NOT NULL
+                                THEN source_conf
+                            WHEN target_conf IS NOT NULL
+                                THEN target_conf
+                            ELSE 0.7
+                            END AS confidence
+                        RETURN *
+                        ORDER BY id
+                        LIMIT 1000
+                    """, user_id=str(user_id))
+                else:
+                    # Get all relationships (fallback for backward compatibility)
+                    result = session.run("""
+                        MATCH (source)-[r]->(target)
+                        WITH 
+                        id(r) AS id,
+                        source.name AS source_node,
+                        target.name AS target_node,
+                        COALESCE(r.name, type(r)) AS relationship_label,
+                        r.timestamp AS timestamp,
+                        source.confidence AS source_conf,
+                        target.confidence AS target_conf
+                        WITH id, source_node, target_node, relationship_label, timestamp, source_conf, target_conf,
+                            CASE
+                            WHEN source_conf IS NOT NULL AND target_conf IS NOT NULL
+                                THEN (source_conf + target_conf) / 2.0
+                            WHEN source_conf IS NOT NULL
+                                THEN source_conf
+                            WHEN target_conf IS NOT NULL
+                                THEN target_conf
+                            ELSE 0.7
+                            END AS confidence
+                        RETURN *
+                        ORDER BY id
+                        LIMIT 1000
+                    """)
 
                 relationships = []
                 for record in result:
@@ -559,6 +606,7 @@ class GraphRAGService:
         except Exception as e:
             logger.error(f"Error getting relationships: {str(e)}")
             raise
+
 
     def __del__(self):
         if hasattr(self, 'neo4j_driver'):

@@ -18,6 +18,7 @@ from app.schemas.graph_rag import ExtendedGraphRAGResponse
 from app.utils.file_utils import save_chat_image
 from app.services.auth.auth_service import get_user_from_token
 from app.services.rag_service import RAGService
+from app.models.chat import ChatMessage
 
 logger = logging.getLogger(__name__)
 
@@ -238,12 +239,7 @@ async def ask_question(
                 "created_at": msg.created_at
             })
         
-        # Add user message to chat history
-        chat_service.add_message_to_session(
-            session_id=session_id,
-            role="user",
-            content=request.text
-        )
+        # We'll add user message only after successful processing
         
         # Add the current message to chat history for context
         chat_history.append({"role": "user", "content": request.text})
@@ -262,62 +258,138 @@ async def ask_question(
         rag_service = RAGService()
         
         # Process based on mode
-        if mode == "graph":
-            from app.services.llama_index_graph_rag import GraphRAGService
-            graph_rag_service = GraphRAGService()
-            answer_data = await graph_rag_service.get_answer(request.text, chat_history, user_obj)
-            response_content = json.dumps({
-                "answer": answer_data.answer,
-                "reasoning_nodes": [node.dict() for node in answer_data.reasoning_nodes] if answer_data.reasoning_nodes else [],
-                "sources": answer_data.sources or []
-            })
-        elif mode == "combined":
-            # Use both RAG and Graph RAG
-            normal_result = await rag_service.query(request.text, user.id, chat_history=chat_history, user=user_obj)
-            from app.services.llama_index_graph_rag import GraphRAGService
-            graph_rag_service = GraphRAGService()
-            graph_result = await graph_rag_service.get_answer(request.text, chat_history, user_obj)
-            
-            response_content = json.dumps({
-                "answer": f"Combined Response:\n\nRAG: {normal_result.answer if normal_result.answer else ''}\n\nGraph RAG: {graph_result.answer}",
-                "reasoning_nodes": [node.dict() for node in graph_result.reasoning_nodes] if graph_result.reasoning_nodes else [],
-                "sources": (normal_result.sources or []) + (graph_result.sources or [])
-            })
-        else:
-            # Normal RAG mode
-            result = await rag_service.query(request.text, user.id, chat_history=chat_history, user=user_obj)
-            response_content = json.dumps({
-                "answer": result.answer if result.answer else 'No answer found',
-                "sources": result.sources if result.sources else [],
-                "reasoning_nodes": [node.dict() for node in result.reasoning_nodes] if result.reasoning_nodes else []
-            })
-        
-        # Extract reasoning nodes from response content for storage
-        nodes_referenced = []
         try:
-            parsed_response = json.loads(response_content)
-            if parsed_response.get("reasoning_nodes"):
-                nodes_referenced = parsed_response["reasoning_nodes"]
-        except (json.JSONDecodeError, KeyError):
-            pass
-        
-        # Add assistant response to chat
-        chat_service.add_message_to_session(
-            session_id=session_id,
-            role="assistant",
-            content=response_content,
-            nodes_referenced=nodes_referenced
-        )
-        
-        # Cache the response
-        response_data = {"status": "success", "response": response_content}
-        chat_cache.set_chat_response(request.text, user.id, mode, response_data)
-        
-        return response_data
+            if mode == "graph":
+                from app.services.llama_index_graph_rag import GraphRAGService
+                graph_rag_service = GraphRAGService()
+                answer_data = await graph_rag_service.get_answer(request.text, chat_history, user_obj)
+                response_content = json.dumps({
+                    "answer": answer_data.answer,
+                    "reasoning_nodes": [node.dict() for node in answer_data.reasoning_nodes] if answer_data.reasoning_nodes else [],
+                    "sources": answer_data.sources or []
+                })
+            elif mode == "combined":
+                # Use both RAG and Graph RAG
+                normal_result = await rag_service.query(request.text, user.id, chat_history=chat_history, user=user_obj)
+                from app.services.llama_index_graph_rag import GraphRAGService
+                graph_rag_service = GraphRAGService()
+                graph_result = await graph_rag_service.get_answer(request.text, chat_history, user_obj)
+                
+                response_content = json.dumps({
+                    "answer": f"Combined Response:\n\nRAG: {normal_result.answer if normal_result.answer else ''}\n\nGraph RAG: {graph_result.answer}",
+                    "reasoning_nodes": [node.dict() for node in graph_result.reasoning_nodes] if graph_result.reasoning_nodes else [],
+                    "sources": (normal_result.sources or []) + (graph_result.sources or [])
+                })
+            else:
+                # Normal RAG mode
+                result = await rag_service.query(request.text, user.id, chat_history=chat_history, user=user_obj)
+                response_content = json.dumps({
+                    "answer": result.answer if result.answer else 'No answer found',
+                    "sources": result.sources if result.sources else [],
+                    "reasoning_nodes": [node.dict() for node in result.reasoning_nodes] if result.reasoning_nodes else []
+                })
+            
+            # Check if the response contains quota errors even if wrapped in success
+            try:
+                parsed_response = json.loads(response_content)
+                answer_text = parsed_response.get("answer", "")
+                
+                # Check for quota errors in the answer text
+                if ("insufficient_quota" in answer_text.lower() or 
+                    "quota" in answer_text.lower() or
+                    "Error code: 429" in answer_text or
+                    "exceeded your current quota" in answer_text.lower()):
+                    
+                    # Return elegant error response without saving anything
+                    error_response = json.dumps({
+                        "answer": "💡 AI service quota exceeded. Your request couldn't be processed due to usage limits. Please try again in a few moments or contact support if this persists.",
+                        "sources": [],
+                        "reasoning_nodes": []
+                    })
+                    return {"status": "success", "response": error_response}
+                    
+            except json.JSONDecodeError:
+                pass  # If we can't parse the JSON, continue with normal flow
+            
+            # Only save to database if no errors detected
+            # Add user message to chat history
+            chat_service.add_message_to_session(
+                session_id=session_id,
+                role="user",
+                content=request.text
+            )
+            
+            # Extract reasoning nodes from response content for storage
+            nodes_referenced = []
+            try:
+                parsed_response = json.loads(response_content)
+                if parsed_response.get("reasoning_nodes"):
+                    nodes_referenced = parsed_response["reasoning_nodes"]
+            except (json.JSONDecodeError, KeyError):
+                pass
+            
+            # Add assistant response to chat
+            chat_service.add_message_to_session(
+                session_id=session_id,
+                role="assistant",
+                content=response_content,
+                nodes_referenced=nodes_referenced
+            )
+            
+            # Cache the response
+            response_data = {"status": "success", "response": response_content}
+            chat_cache.set_chat_response(request.text, user.id, mode, response_data)
+            
+            return response_data
+            
+        except Exception as e:
+            error_message = str(e)
+            logger.error(f"LLM query error: {error_message}")
+            
+            # For quota errors, rate limits, and timeouts, return elegant error responses without saving
+            if "insufficient_quota" in error_message.lower() or "quota" in error_message.lower():
+                error_response = json.dumps({
+                    "answer": "💡 AI service quota exceeded. Your request couldn't be processed due to usage limits. Please try again in a few moments or contact support if this persists.",
+                    "sources": [],
+                    "reasoning_nodes": []
+                })
+                return {"status": "success", "response": error_response}
+                
+            elif "rate_limit" in error_message.lower() or "rate limit" in error_message.lower():
+                error_response = json.dumps({
+                    "answer": "⏱️ Too many requests detected. Please slow down and try again in a few seconds.",
+                    "sources": [],
+                    "reasoning_nodes": []
+                })
+                return {"status": "success", "response": error_response}
+                
+            elif "timeout" in error_message.lower():
+                error_response = json.dumps({
+                    "answer": "⏰ Request timed out. The AI service is taking longer than expected. Please try again.",
+                    "sources": [],
+                    "reasoning_nodes": []
+                })
+                return {"status": "success", "response": error_response}
+                
+            else:
+                # For other errors, return generic error without saving
+                error_response = json.dumps({
+                    "answer": "🔧 Something went wrong on our end. Please try again or contact support if the issue persists.",
+                    "sources": [],
+                    "reasoning_nodes": []
+                })
+                return {"status": "success", "response": error_response}
         
     except Exception as e:
-        logger.error(f"Error in ask_question: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # This outer exception handler catches errors not related to LLM calls
+        # such as database errors, authentication issues, etc.
+        logger.error(f"Unexpected error in ask_question: {str(e)}")
+        error_response = json.dumps({
+            "answer": "🔧 Something went wrong on our end. Please try again or contact support if the issue persists.",
+            "sources": [],
+            "reasoning_nodes": []
+        })
+        return {"status": "success", "response": error_response}
 
 
 @router.delete("/session/{session_id}")

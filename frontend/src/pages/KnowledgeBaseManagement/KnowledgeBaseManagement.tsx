@@ -27,7 +27,7 @@ import {
 } from '@ionic/react';
 import React, { useEffect, useState, useRef } from 'react';
 import DataTable from 'react-data-table-component';
-import { 
+import {
   trash, 
   eye, 
   cloudUpload, 
@@ -38,7 +38,13 @@ import {
   list,
   hourglassOutline,
   warningOutline,
-  nuclear
+  nuclear,
+  checkmarkCircle,
+  timeOutline,
+  alertCircle,
+  syncOutline,
+  documentOutline,
+  closeCircle
 } from 'ionicons/icons';
 import axios from 'axios';
 import Header from '../../components/Header/Header';
@@ -120,15 +126,47 @@ const formatFileSize = (bytes: number): string => {
 
 const getStatusClass = (status: string): string => {
   switch (status.toLowerCase()) {
-    case 'processed':
-      return 'status-processed';
+    case 'completed':
+      return 'status-completed';
+    case 'processing':
+      return 'status-processing';
     case 'pending':
       return 'status-pending';
+    case 'uploaded':
+      return 'status-uploaded';
     case 'failed':
       return 'status-failed';
+    case 'error':
+      return 'status-error';
     default:
       return 'status-default';
   }
+};
+
+const getStatusIcon = (status: string): string => {
+  switch (status.toLowerCase()) {
+    case 'completed':
+      return checkmarkCircle;
+    case 'processing':
+      return syncOutline;
+    case 'pending':
+      return timeOutline;
+    case 'uploaded':
+      return documentOutline;
+    case 'failed':
+    case 'error':
+      return closeCircle;
+    default:
+      return alertCircle;
+  }
+};
+
+const getIndexedStatusClass = (isIndexed: boolean): string => {
+  return isIndexed ? 'status-indexed' : 'status-not-indexed';
+};
+
+const getIndexedStatusIcon = (isIndexed: boolean): string => {
+  return isIndexed ? checkmarkCircle : timeOutline;
 };
 
 const KnowledgeBaseManagement: React.FC = () => {
@@ -176,6 +214,14 @@ const KnowledgeBaseManagement: React.FC = () => {
     pending: 0,
     indexed: 0
   });
+  
+  // Real-time polling state
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  
+  // WebSocket state for real-time updates
+  const [documentWs, setDocumentWs] = useState<WebSocket | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
     // Fetch documents
@@ -186,12 +232,109 @@ const KnowledgeBaseManagement: React.FC = () => {
     fetchRelationships();
     fetchDocumentCount();
     
+    // Establish WebSocket connection for real-time document updates
+    connectDocumentWebSocket();
+    
     return () => {
       if (ws) {
         ws.close();
       }
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+      if (documentWs) {
+        documentWs.close();
+      }
     };
-  }, [dispatch, ws]);
+  }, [dispatch]);
+  
+  const connectDocumentWebSocket = async () => {
+    try {
+      const token = await get("token");
+      if (!token) return;
+      
+      const wsUrl = `ws://${API_BASE_URL.replace('http://', '')}/documents/ws/status?token=${token}`;
+      const websocket = new WebSocket(wsUrl);
+      
+      websocket.onopen = () => {
+        console.log('Document WebSocket connected');
+        setWsConnected(true);
+        setDocumentWs(websocket);
+      };
+      
+      websocket.onmessage = (event) => {
+        try {
+          const update = JSON.parse(event.data);
+          if (update.type === 'document_status_update') {
+            // Refresh documents to get the latest status
+            dispatch(fetchDocuments());
+            fetchDocumentCount();
+            
+            // Show toast notification
+            setToastMessage(`${update.filename}: ${update.message || update.status}`);
+            setShowToast(true);
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
+        }
+      };
+      
+      websocket.onclose = () => {
+        console.log('Document WebSocket disconnected');
+        setWsConnected(false);
+        setDocumentWs(null);
+        
+        // Attempt to reconnect after 5 seconds
+        setTimeout(() => {
+          if (!documentWs) {
+            connectDocumentWebSocket();
+          }
+        }, 5000);
+      };
+      
+      websocket.onerror = (error) => {
+        console.error('Document WebSocket error:', error);
+        setWsConnected(false);
+      };
+      
+    } catch (error) {
+      console.error('Error connecting to document WebSocket:', error);
+    }
+  };
+  
+  // Start polling when there are processing documents (fallback if WebSocket fails)
+  useEffect(() => {
+    const hasProcessingDocuments = documents.some(doc => 
+      doc.status === 'processing' || doc.status === 'pending' || doc.status === 'uploaded'
+    );
+    
+    // Only use polling as fallback if WebSocket is not connected
+    if (hasProcessingDocuments && !isPolling && !wsConnected) {
+      startPolling();
+    } else if ((!hasProcessingDocuments || wsConnected) && isPolling) {
+      stopPolling();
+    }
+  }, [documents, isPolling, wsConnected]);
+  
+  const startPolling = () => {
+    if (pollingInterval) return; // Already polling
+    
+    setIsPolling(true);
+    const interval = setInterval(() => {
+      dispatch(fetchDocuments());
+      fetchDocumentCount();
+    }, 5000); // Poll every 5 seconds (less aggressive when used as fallback)
+    
+    setPollingInterval(interval);
+  };
+  
+  const stopPolling = () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
+    }
+    setIsPolling(false);
+  };
 
   // Document Management Functions
   const handleProcessDocuments = async (id: number) => {
@@ -271,6 +414,7 @@ const KnowledgeBaseManagement: React.FC = () => {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await get("token")}`
         }
       });
 
@@ -301,6 +445,7 @@ const KnowledgeBaseManagement: React.FC = () => {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await get("token")}`
         },
       });
 
@@ -460,9 +605,7 @@ const KnowledgeBaseManagement: React.FC = () => {
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
-  const getIndexedStatusClass = (isIndexed: boolean): string => {
-    return isIndexed ? 'status-processed' : 'status-pending';
-  };
+  // Removed duplicate function - now defined earlier in the file
 
   // Document table columns
   const columns = [
@@ -491,6 +634,7 @@ const KnowledgeBaseManagement: React.FC = () => {
       selector: (row: Document) => row.status,
       cell: (row: Document) => (
         <div className={`status-badge ${getStatusClass(row.status)}`}>
+          <IonIcon icon={getStatusIcon(row.status)} className="status-icon" />
           {row.status}
         </div>
       ),
@@ -501,6 +645,7 @@ const KnowledgeBaseManagement: React.FC = () => {
       selector: (row: Document) => row.is_indexed,
       cell: (row: Document) => (
         <div className={`status-badge ${getIndexedStatusClass(row.is_indexed)}`}>
+          <IonIcon icon={getIndexedStatusIcon(row.is_indexed)} className="status-icon" />
           {row.is_indexed ? 'Yes' : 'No'}
         </div>
       ),
@@ -581,13 +726,25 @@ const KnowledgeBaseManagement: React.FC = () => {
               </IonRow>
             </IonGrid>
 
+            {/* Connection Status Indicator */}
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px', gap: '8px' }}>
+              <IonIcon 
+                icon={wsConnected ? checkmarkCircle : (isPolling ? syncOutline : alertCircle)} 
+                color={wsConnected ? 'success' : (isPolling ? 'warning' : 'medium')}
+              />
+              <span style={{ fontSize: '0.9em', color: 'var(--ion-color-medium)' }}>
+                {wsConnected ? 'Real-time updates active' : (isPolling ? 'Polling for updates' : 'Updates paused')}
+              </span>
+            </div>
+
             {/* Action Buttons */}
             <div className="document-actions">
               <IonButton onClick={() => setShowUploadModal(true)}>
                 <IonIcon icon={cloudUpload} slot="start" />
                 Upload Documents
               </IonButton>
-              <IonButton onClick={() => handleProcessDocuments(documents[0]?.id)}>
+              {/* Commented out manual processing buttons - now using unified upload flow */}
+              {/* <IonButton onClick={() => handleProcessDocuments(documents[0]?.id)}>
                 {isProcessing ? <IonSpinner name="crescent" /> : <IonIcon icon={book} slot="start" />}
                 Process Documents
               </IonButton>
@@ -602,7 +759,7 @@ const KnowledgeBaseManagement: React.FC = () => {
               >
                 {isReindexing ? <IonSpinner name="crescent" /> : <IonIcon icon={refreshCircle} slot="start" />}
                 Rebuild Knowledge Graph
-              </IonButton>
+              </IonButton> */}
               <IonButton
                 color="danger"
                 onClick={handleClearMemory}

@@ -49,3 +49,5 @@ memduo.db
 /llama_index_agent_flow_docs
 
 openrank-t3m-key.pem
+
+memduo.db

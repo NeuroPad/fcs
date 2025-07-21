@@ -22,7 +22,7 @@ from typing_extensions import LiteralString
 
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import DEFAULT_DATABASE, RUNTIME_QUERY
+from graphiti_core.helpers import get_default_group_id, RUNTIME_QUERY
 from graphiti_core.nodes import EntityNode, get_entity_node_from_record
 from graphiti_core.search.search import search
 from graphiti_core.search.search_config import SearchConfig, SearchResults
@@ -36,6 +36,7 @@ async def get_contradiction_edges(
     driver: AsyncDriver,
     group_ids: list[str] | None = None,
     limit: int = 100,
+    db_type: str = 'neo4j',
 ) -> list[EntityEdge]:
     """
     Retrieve all CONTRADICTS edges from the graph.
@@ -89,7 +90,7 @@ async def get_contradiction_edges(
         query,
         params=query_params,
         limit=limit,
-        database_=DEFAULT_DATABASE,
+        database_=get_default_group_id(db_type),
         routing_='r',
     )
     
@@ -101,6 +102,7 @@ async def get_contradicted_nodes(
     driver: AsyncDriver,
     node_uuids: list[str],
     group_ids: list[str] | None = None,
+    db_type: str = 'neo4j',
 ) -> dict[str, list[EntityNode]]:
     """
     Get nodes that are contradicted by the given nodes.
@@ -154,7 +156,7 @@ async def get_contradicted_nodes(
     records, _, _ = await driver.execute_query(
         query,
         params=query_params,
-        database_=DEFAULT_DATABASE,
+        database_=get_default_group_id(db_type),
         routing_='r',
     )
     
@@ -174,6 +176,7 @@ async def get_contradicting_nodes(
     driver: AsyncDriver,
     node_uuids: list[str],
     group_ids: list[str] | None = None,
+    db_type: str = 'neo4j',
 ) -> dict[str, list[EntityNode]]:
     """
     Get nodes that contradict the given nodes.
@@ -227,7 +230,7 @@ async def get_contradicting_nodes(
     records, _, _ = await driver.execute_query(
         query,
         params=query_params,
-        database_=DEFAULT_DATABASE,
+        database_=get_default_group_id(db_type),
         routing_='r',
     )
     
@@ -309,10 +312,10 @@ async def contradiction_aware_search(
     
     if all_node_uuids:
         contradicted_map = await get_contradicted_nodes(
-            clients.driver, all_node_uuids, group_ids
+            clients.driver, all_node_uuids, group_ids, clients.driver.provider
         )
         contradicting_map = await get_contradicting_nodes(
-            clients.driver, all_node_uuids, group_ids
+            clients.driver, all_node_uuids, group_ids, clients.driver.provider
         )
         
         # Add contradiction metadata to nodes
@@ -331,7 +334,7 @@ async def contradiction_aware_search(
     
     # Get all CONTRADICTS edges for additional context
     contradiction_edges = await get_contradiction_edges(
-        clients.driver, group_ids, limit=1000
+        clients.driver, group_ids, limit=1000, db_type=clients.driver.provider
     )
     
     # Add contradiction edges to results
@@ -428,13 +431,13 @@ async def enhanced_contradiction_search(
     
     if all_node_uuids:
         contradicted_map = await get_contradicted_nodes(
-            clients.driver, all_node_uuids, group_ids
+            clients.driver, all_node_uuids, group_ids, clients.driver.provider
         )
         contradicting_map = await get_contradicting_nodes(
-            clients.driver, all_node_uuids, group_ids
+            clients.driver, all_node_uuids, group_ids, clients.driver.provider
         )
         contradiction_edges = await get_contradiction_edges(
-            clients.driver, group_ids, limit=1000
+            clients.driver, group_ids, limit=1000, db_type=clients.driver.provider
         )
     
     return ContradictionSearchResults(
@@ -445,4 +448,4 @@ async def enhanced_contradiction_search(
         contradiction_edges=contradiction_edges,
         contradicted_nodes_map=contradicted_map,
         contradicting_nodes_map=contradicting_map,
-    ) 
+    )

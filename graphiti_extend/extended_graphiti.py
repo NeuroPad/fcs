@@ -52,6 +52,12 @@ from graphiti_core.utils.maintenance.node_operations import (
     resolve_extracted_nodes,
 )
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
+from graphiti_core.helpers import (
+    get_default_group_id,
+    validate_excluded_entity_types,
+    validate_group_id,
+)
+from graphiti_core.driver.driver import GraphDriver
 
 from .contradictions.handler import detect_and_create_node_contradictions
 from .search.handler import contradiction_aware_search as _contradiction_aware_search, enhanced_contradiction_search as _enhanced_contradiction_search
@@ -92,13 +98,15 @@ class ExtendedGraphiti(Graphiti):
 
     def __init__(
         self,
-        uri: str,
-        user: str,
-        password: str,
+        uri: str | None = None,
+        user: str | None = None,
+        password: str | None = None,
         llm_client: LLMClient | None = None,
         embedder: EmbedderClient | None = None,
         cross_encoder: CrossEncoderClient | None = None,
         store_raw_episode_content: bool = True,
+        graph_driver: GraphDriver | None = None,
+        max_coroutines: int | None = None,
         enable_contradiction_detection: bool = True,
         contradiction_threshold: float = 0.7,
     ):
@@ -107,11 +115,11 @@ class ExtendedGraphiti(Graphiti):
 
         Parameters
         ----------
-        uri : str
-            The URI of the Neo4j database.
-        user : str
+        uri : str | None, optional
+            The URI of the Neo4j database. Required when graph_driver is None.
+        user : str | None, optional
             The username for authenticating with the Neo4j database.
-        password : str
+        password : str | None, optional
             The password for authenticating with the Neo4j database.
         llm_client : LLMClient | None, optional
             An instance of LLMClient for natural language processing tasks.
@@ -121,6 +129,11 @@ class ExtendedGraphiti(Graphiti):
             An instance of CrossEncoderClient for reranking.
         store_raw_episode_content : bool, optional
             Whether to store raw episode content. Defaults to True.
+        graph_driver : GraphDriver | None, optional
+            An instance of GraphDriver for database operations.
+            If not provided, a default Neo4jDriver will be initialized.
+        max_coroutines : int | None, optional
+            The maximum number of concurrent operations allowed. Overrides SEMAPHORE_LIMIT set in the environment.
         enable_contradiction_detection : bool, optional
             Whether to enable automatic contradiction detection. Defaults to True.
         contradiction_threshold : float, optional
@@ -134,6 +147,8 @@ class ExtendedGraphiti(Graphiti):
             embedder=embedder,
             cross_encoder=cross_encoder,
             store_raw_episode_content=store_raw_episode_content,
+            graph_driver=graph_driver,
+            max_coroutines=max_coroutines,
         )
         
         self.enable_contradiction_detection = enable_contradiction_detection
@@ -155,10 +170,11 @@ class ExtendedGraphiti(Graphiti):
         source_description: str,
         reference_time: datetime,
         source: EpisodeType = EpisodeType.message,
-        group_id: str = '',
+        group_id: str | None = None,
         uuid: str | None = None,
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
+        excluded_entity_types: list[str] | None = None,
         previous_episode_uuids: list[str] | None = None,
         edge_types: dict[str, BaseModel] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
@@ -189,6 +205,8 @@ class ExtendedGraphiti(Graphiti):
             Whether to update communities with new node information.
         entity_types : dict[str, BaseModel] | None
             Optional entity type definitions.
+        excluded_entity_types : list[str] | None
+            Optional list of entity type names to exclude from the graph.
         previous_episode_uuids : list[str] | None
             Optional list of episode uuids to use as previous episodes.
         edge_types : dict[str, BaseModel] | None
@@ -205,7 +223,11 @@ class ExtendedGraphiti(Graphiti):
             start = time()
             now = utc_now()
 
+            # if group_id is None, use the default group id by the provider
+            group_id = group_id or get_default_group_id(self.driver.provider)
             validate_entity_types(entity_types)
+            validate_excluded_entity_types(excluded_entity_types, entity_types)
+            validate_group_id(group_id)
 
             previous_episodes = (
                 await self.retrieve_episodes(
@@ -242,7 +264,7 @@ class ExtendedGraphiti(Graphiti):
 
             # Extract entities as nodes
             extracted_nodes = await extract_nodes(
-                self.clients, episode, previous_episodes, entity_types
+                self.clients, episode, previous_episodes, entity_types, excluded_entity_types
             )
 
             # Extract edges and resolve nodes
@@ -525,7 +547,7 @@ class ExtendedGraphiti(Graphiti):
                     )
 
             # Build episodic edges
-            episodic_edges = build_episodic_edges(nodes, episode, now)
+            episodic_edges = build_episodic_edges(nodes, episode.uuid, now)
 
             episode.entity_edges = [edge.uuid for edge in entity_edges]
 
@@ -1319,4 +1341,4 @@ class ExtendedGraphiti(Graphiti):
         except Exception as e:
             logger.error(f"Error getting confidence summary: {e}")
         
-        return {} 
+        return {}

@@ -77,6 +77,19 @@ def get_user_from_token(db: Session, token: str):
         return None, "User not found"
     return user, None
 
+def get_current_user_from_token(db: Session, token: str):
+    """Get current user from token for WebSocket authentication"""
+    user, error = get_user_from_token(db, token)
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=error,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return user
+
 
 # FastAPI dependency for getting current user
 security = HTTPBearer()

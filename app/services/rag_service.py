@@ -689,7 +689,12 @@ class RAGService:
     
     
     async def process_pending_documents(self, db: Session) -> Dict[str, Any]:
-        """Process all pending documents in the database"""
+        """Process all pending documents in the database
+        
+        DEPRECATED: This method is deprecated in favor of the unified workflow
+        in documents.py that handles both PDF processing and RAG indexing.
+        Use the unified process_and_index_document function instead.
+        """
         try:
             # Get all documents that need indexing
             pending_documents = db.query(DBDocument).filter(

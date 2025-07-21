@@ -317,15 +317,30 @@ const OptimizedChat: React.FC = () => {
   }, [newMessage, isLoading, chatId, queryMode, dispatch]);
 
   const handleRetryMessage = useCallback((messageId: string) => {
-    dispatch(retryFailedMessage(messageId));
-    // Re-send the message
-    const failedMessage = selectedChat.find((msg: any) => msg.id === messageId);
-    if (failedMessage) {
-      dispatch(sendMessageOptimistic({
-        sessionId: chatId?.toString() || '',
-        message: failedMessage.content,
-        mode: queryMode
-      }));
+    // Find the error message and the user message that caused it
+    const errorMessageIndex = selectedChat.findIndex((msg: any) => msg.id === messageId);
+    
+    if (errorMessageIndex !== -1 && errorMessageIndex > 0) {
+      // Get the user message that came before this error
+      const userMessageIndex = errorMessageIndex - 1;
+      const userMessage = selectedChat[userMessageIndex];
+      
+      // Remove the error message from the UI
+      const updatedChat = [...selectedChat];
+      updatedChat.splice(errorMessageIndex, 1);
+      dispatch(setMessages(updatedChat));
+      
+      // Clear any existing error
+      dispatch(clearError());
+      
+      // Re-send the user message
+      if (userMessage && userMessage.role === 'user') {
+        dispatch(sendMessageOptimistic({
+          sessionId: chatId?.toString() || '',
+          message: userMessage.content,
+          mode: queryMode
+        }));
+      }
     }
   }, [dispatch, selectedChat, chatId, queryMode]);
 

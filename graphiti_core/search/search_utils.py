@@ -31,7 +31,6 @@ from graphiti_core.graph_queries import (
     get_vector_cosine_func_query,
 )
 from graphiti_core.helpers import (
-    DEFAULT_DATABASE,
     RUNTIME_QUERY,
     lucene_sanitize,
     normalize_l2,
@@ -61,9 +60,9 @@ MAX_SEARCH_DEPTH = 3
 MAX_QUERY_LENGTH = 32
 
 
-def fulltext_query(query: str, group_ids: list[str] | None = None):
+def fulltext_query(query: str, group_ids: list[str] | None = None, fulltext_syntax: str = ''):
     group_ids_filter_list = (
-        [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids] if group_ids is not None else []
+        [fulltext_syntax + f"group_id:'{lucene_sanitize(g)}'" for g in group_ids] if group_ids is not None else []
     )
     group_ids_filter = ''
     for f in group_ids_filter_list:
@@ -116,7 +115,6 @@ async def get_mentioned_nodes(
     records, _, _ = await driver.execute_query(
         query,
         uuids=episode_uuids,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
 
@@ -143,7 +141,6 @@ async def get_communities_by_nodes(
     records, _, _ = await driver.execute_query(
         query,
         uuids=node_uuids,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
 
@@ -160,7 +157,7 @@ async def edge_fulltext_search(
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # fulltext search over facts
-    fuzzy_query = fulltext_query(query, group_ids)
+    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
         return []
 
@@ -198,7 +195,6 @@ async def edge_fulltext_search(
         query=fuzzy_query,
         group_ids=group_ids,
         limit=limit,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
 
@@ -274,12 +270,8 @@ async def edge_similarity_search(
         group_ids=group_ids,
         limit=limit,
         min_score=min_score,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
-
-    if driver.provider == 'falkordb':
-        records = [dict(zip(header, row, strict=True)) for row in records]
 
     edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -332,7 +324,6 @@ async def edge_bfs_search(
         bfs_origin_node_uuids=bfs_origin_node_uuids,
         depth=bfs_max_depth,
         limit=limit,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
 
@@ -349,7 +340,7 @@ async def node_fulltext_search(
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
-    fuzzy_query = fulltext_query(query, group_ids)
+    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
         return []
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
@@ -374,11 +365,8 @@ async def node_fulltext_search(
         query=fuzzy_query,
         group_ids=group_ids,
         limit=limit,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
-    if driver.provider == 'falkordb':
-        records = [dict(zip(header, row, strict=True)) for row in records]
 
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -430,11 +418,9 @@ async def node_similarity_search(
         group_ids=group_ids,
         limit=limit,
         min_score=min_score,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
-    if driver.provider == 'falkordb':
-        records = [dict(zip(header, row, strict=True)) for row in records]
+
     nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes
@@ -471,7 +457,6 @@ async def node_bfs_search(
         bfs_origin_node_uuids=bfs_origin_node_uuids,
         depth=bfs_max_depth,
         limit=limit,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
     nodes = [get_entity_node_from_record(record) for record in records]
@@ -487,7 +472,7 @@ async def episode_fulltext_search(
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EpisodicNode]:
     # BM25 search to get top episodes
-    fuzzy_query = fulltext_query(query, group_ids)
+    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
         return []
 
@@ -517,7 +502,6 @@ async def episode_fulltext_search(
         query=fuzzy_query,
         group_ids=group_ids,
         limit=limit,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
     episodes = [get_episodic_node_from_record(record) for record in records]
@@ -532,7 +516,7 @@ async def community_fulltext_search(
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
     # BM25 search to get top communities
-    fuzzy_query = fulltext_query(query, group_ids)
+    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
         return []
 
@@ -545,7 +529,8 @@ async def community_fulltext_search(
             comm.group_id AS group_id, 
             comm.name AS name, 
             comm.created_at AS created_at, 
-            comm.summary AS summary
+            comm.summary AS summary,
+            comm.name_embedding AS name_embedding
         ORDER BY score DESC
         LIMIT $limit
         """
@@ -556,7 +541,6 @@ async def community_fulltext_search(
         query=fuzzy_query,
         group_ids=group_ids,
         limit=limit,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
     communities = [get_community_node_from_record(record) for record in records]
@@ -595,7 +579,8 @@ async def community_similarity_search(
                comm.group_id AS group_id,
                comm.name AS name, 
                comm.created_at AS created_at, 
-               comm.summary AS summary
+               comm.summary AS summary,
+               comm.name_embedding AS name_embedding
            ORDER BY score DESC
            LIMIT $limit
         """
@@ -607,7 +592,6 @@ async def community_similarity_search(
         group_ids=group_ids,
         limit=limit,
         min_score=min_score,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
     communities = [get_community_node_from_record(record) for record in records]
@@ -756,7 +740,7 @@ async def get_relevant_nodes(
             'uuid': node.uuid,
             'name': node.name,
             'name_embedding': node.name_embedding,
-            'fulltext_query': fulltext_query(node.name, [node.group_id]),
+            'fulltext_query': fulltext_query(node.name, [node.group_id], driver.fulltext_syntax),
         }
         for node in nodes
     ]
@@ -768,7 +752,6 @@ async def get_relevant_nodes(
         group_id=group_id,
         limit=limit,
         min_score=min_score,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
 
@@ -838,7 +821,6 @@ async def get_relevant_edges(
         edges=[edge.model_dump() for edge in edges],
         limit=limit,
         min_score=min_score,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
 
@@ -909,7 +891,6 @@ async def get_edge_invalidation_candidates(
         edges=[edge.model_dump() for edge in edges],
         limit=limit,
         min_score=min_score,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
     invalidation_edges_dict: dict[str, list[EntityEdge]] = {
@@ -959,7 +940,6 @@ async def node_distance_reranker(
         query,
         node_uuids=filtered_uuids,
         center_uuid=center_node_uuid,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
     if driver.provider == 'falkordb':
@@ -1001,7 +981,6 @@ async def episode_mentions_reranker(
     results, _, _ = await driver.execute_query(
         query,
         node_uuids=sorted_uuids,
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
 
@@ -1064,7 +1043,7 @@ async def get_embeddings_for_nodes(
                     """
 
     results, _, _ = await driver.execute_query(
-        query, node_uuids=[node.uuid for node in nodes], database_=DEFAULT_DATABASE, routing_='r'
+        query, node_uuids=[node.uuid for node in nodes], routing_='r'
     )
 
     embeddings_dict: dict[str, list[float]] = {}
@@ -1090,7 +1069,6 @@ async def get_embeddings_for_communities(
     results, _, _ = await driver.execute_query(
         query,
         community_uuids=[community.uuid for community in communities],
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
 
@@ -1117,7 +1095,6 @@ async def get_embeddings_for_edges(
     results, _, _ = await driver.execute_query(
         query,
         edge_uuids=[edge.uuid for edge in edges],
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
 

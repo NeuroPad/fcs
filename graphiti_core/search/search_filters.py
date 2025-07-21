@@ -19,7 +19,6 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
-from typing_extensions import LiteralString
 
 
 class ComparisonOperator(Enum):
@@ -53,8 +52,8 @@ class SearchFilters(BaseModel):
 
 def node_search_filter_query_constructor(
     filters: SearchFilters,
-) -> tuple[LiteralString, dict[str, Any]]:
-    filter_query: LiteralString = ''
+) -> tuple[str, dict[str, Any]]:
+    filter_query: str = ''
     filter_params: dict[str, Any] = {}
 
     if filters.node_labels is not None:
@@ -67,8 +66,8 @@ def node_search_filter_query_constructor(
 
 def edge_search_filter_query_constructor(
     filters: SearchFilters,
-) -> tuple[LiteralString, dict[str, Any]]:
-    filter_query: LiteralString = ''
+) -> tuple[str, dict[str, Any]]:
+    filter_query: str = ''
     filter_params: dict[str, Any] = {}
 
     if filters.edge_types is not None:
@@ -158,7 +157,7 @@ def edge_search_filter_query_constructor(
         filter_query += created_at_filter
 
     if filters.expired_at is not None:
-        expired_at_filter = 'AND ('
+        expired_at_filter = ' AND ('
         for i, or_list in enumerate(filters.expired_at):
             for j, date_filter in enumerate(or_list):
                 filter_params['expired_at_' + str(j)] = date_filter.date
