@@ -90,8 +90,6 @@ async def get_contradiction_edges(
         query,
         params=query_params,
         limit=limit,
-        database_=get_default_group_id(db_type),
-        routing_='r',
     )
     
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -156,8 +154,6 @@ async def get_contradicted_nodes(
     records, _, _ = await driver.execute_query(
         query,
         params=query_params,
-        database_=get_default_group_id(db_type),
-        routing_='r',
     )
     
     result = {}
@@ -230,8 +226,6 @@ async def get_contradicting_nodes(
     records, _, _ = await driver.execute_query(
         query,
         params=query_params,
-        database_=get_default_group_id(db_type),
-        routing_='r',
     )
     
     result = {}
