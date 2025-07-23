@@ -415,7 +415,7 @@ class ExtendedGraphiti(Graphiti):
             #     )
             #     entity_edges.extend(invalidation_contradiction_edges)
 
-            # Detect contradictions if enabled
+            # Detect contradictions if enabled - INTEGRATED INTO MAIN FLOW
             contradiction_result = ContradictionDetectionResult(
                 contradictions_found=False,
                 contradiction_edges=[],
@@ -434,16 +434,14 @@ class ExtendedGraphiti(Graphiti):
                         existing_nodes_for_reasoning, 'reasoning_usage', reference_time
                     )
                 
-                # Detect contradictions for normal flow integration
-                contradiction_nodes, contradiction_edges = await self._detect_contradictions_for_nodes(
+                # Extract contradiction pairs as regular nodes during main extraction
+                contradiction_nodes, contradiction_edges = await self._extract_contradiction_pairs_as_nodes(
                     hydrated_nodes, episode, previous_episodes
                 )
                 
                 # Integrate contradiction nodes with the normal flow for proper deduplication
                 if contradiction_nodes:
                     logger.info(f"Integrating {len(contradiction_nodes)} contradiction nodes into normal flow")
-                    
-                    # Add contradiction nodes to the main nodes list and process them through normal resolution
                     
                     # Process contradiction nodes through the normal resolution flow
                     resolved_contradiction_data = await resolve_extracted_nodes(
@@ -611,14 +609,15 @@ class ExtendedGraphiti(Graphiti):
             logger.error(f'Error in add_episode_with_contradictions: {str(e)}')
             raise e
 
-    async def _detect_contradictions_for_nodes(
+    async def _extract_contradiction_pairs_as_nodes(
         self,
         nodes: list[EntityNode],
         episode: EpisodicNode,
         previous_episodes: list[EpisodicNode],
     ) -> tuple[list[EntityNode], list[EntityEdge]]:
         """
-        Detect contradictions for a list of nodes and return data for normal flow integration.
+        Extract contradiction pairs as regular nodes during main extraction phase.
+        This eliminates the need for separate processing and add_triplet function.
         
         Parameters
         ----------
@@ -634,16 +633,19 @@ class ExtendedGraphiti(Graphiti):
         tuple[list[EntityNode], list[EntityEdge]]
             Tuple of (contradiction_nodes, contradiction_edges) for normal flow integration
         """
-
-        
-        # Get all existing nodes in the group to check for contradictions
-        search_query = """
-        MATCH (n:Entity)
-        WHERE n.group_id = $group_id
-        RETURN n
-        """
+        from graphiti_extend.prompts.contradiction import get_contradiction_pairs_prompt, ContradictionPairs
+        from graphiti_core.nodes import EntityNode
+        from graphiti_core.edges import EntityEdge
+        # utc_now is already imported at the top of the file
         
         try:
+            # Get all existing nodes in the group to check for contradictions
+            search_query = """
+            MATCH (n:Entity)
+            WHERE n.group_id = $group_id
+            RETURN n
+            """
+            
             records, _, _ = await self.driver.execute_query(
                 search_query, 
                 group_id=episode.group_id
@@ -664,17 +666,13 @@ class ExtendedGraphiti(Graphiti):
                     if 'created_at' in node_data:
                         created_at = node_data['created_at']
                         if isinstance(created_at, str):
-                            # Try to parse string datetime
                             try:
                                 node_data['created_at'] = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
                             except ValueError:
-                                # Fallback to current time if parsing fails
                                 node_data['created_at'] = utc_now()
                         elif not isinstance(created_at, datetime):
-                            # Fallback to current time if not datetime
                             node_data['created_at'] = utc_now()
                     else:
-                        # Add created_at if missing
                         node_data['created_at'] = utc_now()
                     
                     # Ensure other required fields are present and valid
@@ -692,7 +690,6 @@ class ExtendedGraphiti(Graphiti):
                     
                 except Exception as node_error:
                     logger.error(f"Error creating EntityNode from database record: {str(node_error)}")
-                    # Skip this node and continue with others
                     continue
             
             # Filter out the new nodes themselves from existing node lists to prevent self-contradiction
@@ -706,20 +703,114 @@ class ExtendedGraphiti(Graphiti):
                 logger.debug("No existing nodes to check for contradictions")
                 return [], []
             
-            # Use the new contradiction detection system that returns data for normal flow
-            contradiction_nodes, contradiction_edges = await detect_node_contradictions_for_flow(
-                self.llm_client,
-                episode,
-                filtered_existing_nodes,
-                previous_episodes,
-                self.driver,
+            # Prepare context for contradiction pair extraction
+            existing_nodes_context = [
+                {
+                    'name': node.name,
+                    'summary': node.summary,
+                    'uuid': node.uuid,
+                    'attributes': node.attributes
+                }
+                for node in filtered_existing_nodes
+            ]
+            
+            context = {
+                'episode_content': episode.content,
+                'existing_nodes': existing_nodes_context,
+                'previous_episodes': [ep.content for ep in previous_episodes],
+            }
+            
+            # Extract contradiction pairs using LLM
+            llm_response = await self.llm_client.generate_response(
+                get_contradiction_pairs_prompt(context),
+                response_model=ContradictionPairs,
             )
             
-            logger.info(f"Detected {len(contradiction_nodes)} contradiction nodes and {len(contradiction_edges)} contradiction edges for normal flow integration")
+            contradiction_pairs = llm_response.get('contradiction_pairs', [])
+            
+            if not contradiction_pairs:
+                logger.debug("No contradiction pairs found")
+                return [], []
+            
+            # Convert contradiction pairs to nodes and edges
+            contradiction_nodes = []
+            contradiction_edges = []
+            now = utc_now()
+            
+            for pair in contradiction_pairs:
+                # Handle both object and dict formats for node1 and node2
+                if hasattr(pair, 'node1'):
+                    node1_data = pair.node1
+                    node2_data = pair.node2
+                    contradiction_reason = pair.contradiction_reason
+                else:
+                    # Handle dict format
+                    node1_data = pair.get('node1', {})
+                    node2_data = pair.get('node2', {})
+                    contradiction_reason = pair.get('contradiction_reason', 'Contradiction detected')
+                
+                # Extract node1 attributes
+                if hasattr(node1_data, 'name'):
+                    node1_name = node1_data.name
+                    node1_summary = node1_data.summary
+                    node1_entity_type = getattr(node1_data, 'entity_type', 'Entity')
+                else:
+                    node1_name = node1_data.get('name', 'Unknown')
+                    node1_summary = node1_data.get('summary', '')
+                    node1_entity_type = node1_data.get('entity_type', 'Entity')
+                
+                # Extract node2 attributes
+                if hasattr(node2_data, 'name'):
+                    node2_name = node2_data.name
+                    node2_summary = node2_data.summary
+                    node2_entity_type = getattr(node2_data, 'entity_type', 'Entity')
+                else:
+                    node2_name = node2_data.get('name', 'Unknown')
+                    node2_summary = node2_data.get('summary', '')
+                    node2_entity_type = node2_data.get('entity_type', 'Entity')
+                
+                # Create nodes for the contradiction pair
+                node1 = EntityNode(
+                    name=node1_name,
+                    group_id=episode.group_id,
+                    labels=['Entity', node1_entity_type],
+                    summary=node1_summary,
+                    created_at=now,
+                )
+                
+                node2 = EntityNode(
+                    name=node2_name,
+                    group_id=episode.group_id,
+                    labels=['Entity', node2_entity_type],
+                    summary=node2_summary,
+                    created_at=now,
+                )
+                
+                contradiction_nodes.extend([node1, node2])
+                
+                # Create contradiction edge between the nodes
+                contradiction_edge = EntityEdge(
+                    source_node_uuid=node1.uuid,
+                    target_node_uuid=node2.uuid,
+                    name="CONTRADICTS",
+                    fact=contradiction_reason,
+                    episodes=[episode.uuid],
+                    created_at=now,
+                    valid_at=episode.valid_at,
+                    group_id=episode.group_id,
+                    attributes={
+                        "contradiction_reason": contradiction_reason,
+                        "detected_in_episode": episode.uuid
+                    }
+                )
+                
+                contradiction_edges.append(contradiction_edge)
+            
+            logger.info(f"Extracted {len(contradiction_nodes)} contradiction nodes and {len(contradiction_edges)} contradiction edges")
             return contradiction_nodes, contradiction_edges
             
         except Exception as e:
-            logger.error(f"Error in _detect_contradictions_for_nodes: {str(e)}")
+            logger.error(f"Error in _extract_contradiction_pairs_as_nodes: {str(e)}")
             return [], []
 
     async def _create_contradiction_edges_from_invalidation(

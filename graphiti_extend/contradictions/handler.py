@@ -354,6 +354,85 @@ async def _contradiction_exists(
         return False
 
 
+async def filter_existing_contradiction_edges(
+    driver,
+    contradiction_pairs: List[tuple[EntityNode, EntityNode, str]]
+) -> List[tuple[EntityNode, EntityNode, str]]:
+    """
+    Filter out contradiction pairs that already have CONTRADICTS edges between them.
+    
+    This function follows the same pattern as graphiti core's filter_existing_duplicate_of_edges
+    to prevent duplicate edge creation.
+    
+    Parameters
+    ----------
+    driver
+        Neo4j driver instance
+    contradiction_pairs : List[tuple[EntityNode, EntityNode, str]]
+        List of contradiction pairs with reasons
+        
+    Returns
+    -------
+    List[tuple[EntityNode, EntityNode, str]]
+        Filtered list of contradiction pairs that don't have existing edges
+    """
+    if not contradiction_pairs:
+        return []
+    
+    # Create query to check for existing CONTRADICTS edges
+    query = """
+        UNWIND $contradiction_node_uuids AS contradiction_tuple
+        MATCH (n1:Entity {uuid: contradiction_tuple[0]})-[r:CONTRADICTS]-(n2:Entity {uuid: contradiction_tuple[1]})
+        RETURN DISTINCT
+            n1.uuid AS source_uuid,
+            n2.uuid AS target_uuid
+    """
+    
+    # Create mapping of node pairs to full tuples
+    contradiction_pairs_map = {
+        (node1.uuid, node2.uuid): (node1, node2, reason) 
+        for node1, node2, reason in contradiction_pairs
+    }
+    
+    # Also check reverse direction since CONTRADICTS is bidirectional
+    for node1, node2, reason in contradiction_pairs:
+        contradiction_pairs_map[(node2.uuid, node1.uuid)] = (node1, node2, reason)
+    
+    try:
+        records, _, _ = await driver.execute_query(
+            query,
+            contradiction_node_uuids=list(contradiction_pairs_map.keys()),
+            routing_='r',
+        )
+        
+        # Remove pairs that already have CONTRADICTS edges
+        for record in records:
+            source_uuid = record.get('source_uuid')
+            target_uuid = record.get('target_uuid')
+            
+            # Remove both directions since CONTRADICTS is bidirectional
+            contradiction_pairs_map.pop((source_uuid, target_uuid), None)
+            contradiction_pairs_map.pop((target_uuid, source_uuid), None)
+        
+        # Return unique filtered pairs (avoid duplicates from bidirectional mapping)
+        filtered_pairs = []
+        seen_pairs = set()
+        
+        for node1, node2, reason in contradiction_pairs:
+            pair_key = tuple(sorted([node1.uuid, node2.uuid]))
+            if pair_key not in seen_pairs and (node1.uuid, node2.uuid) in contradiction_pairs_map:
+                filtered_pairs.append((node1, node2, reason))
+                seen_pairs.add(pair_key)
+        
+        logger.info(f"Filtered {len(contradiction_pairs) - len(filtered_pairs)} existing contradiction edges")
+        return filtered_pairs
+        
+    except Exception as e:
+        logger.error(f"Error filtering existing contradiction edges: {str(e)}")
+        # Return original pairs if filtering fails
+        return contradiction_pairs
+
+
 async def create_contradiction_edges_from_pairs(
     contradiction_pairs: List[tuple[EntityNode, EntityNode, str]],
     episode: EpisodicNode,
@@ -362,7 +441,7 @@ async def create_contradiction_edges_from_pairs(
 ) -> List[EntityEdge]:
     """
     Create CONTRADICTS edges from contradiction pairs using add_triplet.
-    Only creates edges if they don't already exist.
+    Duplicate prevention is now handled at the prompt level.
     
     Parameters
     ----------
@@ -373,23 +452,21 @@ async def create_contradiction_edges_from_pairs(
     add_triplet_func : Callable
         Function to add triplet (source_node, edge, target_node)
     driver : optional
-        Neo4j driver for checking existing relationships
+        Neo4j driver (kept for compatibility but not used)
         
     Returns
     -------
     List[EntityEdge]
         List of created contradiction edges
     """
+    if not contradiction_pairs:
+        return []
+    
     contradiction_edges = []
     now = utc_now()
     
     for node1, node2, reason in contradiction_pairs:
         try:
-            # Check if contradiction already exists between these nodes
-            if driver and await _contradiction_exists(driver, node1.uuid, node2.uuid):
-                logger.info(f'Contradiction already exists between {node1.name} and {node2.name}, skipping creation')
-                continue
-            
             # Create contradiction edge
             contradiction_edge = EntityEdge(
                 source_node_uuid=node1.uuid,
@@ -459,13 +536,10 @@ async def detect_and_create_node_contradictions(
             logger.debug("No contradiction pairs detected")
             return []
         
-        # Step 2: Create contradiction edges for normal flow (with deduplication)
-        contradiction_nodes, contradiction_edges = await detect_node_contradictions_for_flow(
-            llm_client, episode, existing_nodes, previous_episodes, driver
+        # Step 2: Create contradiction edges using add_triplet_func
+        contradiction_edges = await create_contradiction_edges_from_pairs(
+            contradiction_pairs, episode, add_triplet_func, driver
         )
-        
-        # Return the edges for normal flow processing
-        return contradiction_edges
         
         logger.info(f"Successfully created {len(contradiction_edges)} contradiction edges")
         return contradiction_edges
