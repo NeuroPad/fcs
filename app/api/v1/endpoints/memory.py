@@ -217,14 +217,14 @@ async def process_documents(service: FCSMemoryService = Depends(get_memory_servi
 @router.post("/clear-neo4j", response_model=OperationResponse, status_code=status.HTTP_200_OK)
 async def clear_neo4j_data(service: FCSMemoryService = Depends(get_memory_service)):
     """Clear all data from Neo4j database - USE WITH CAUTION!"""
-    result = await service.clear_neo4j()
+    result = await service.clear_neo4j_data()
     
-    if result["status"] == "error":
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result["message"])
+    if result.status == "error":
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.message)
     
     return OperationResponse(
-        status=result["status"],
-        message=result["message"]
+        status=result.status,
+        message=result.message
     )
 
 

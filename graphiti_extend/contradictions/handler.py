@@ -459,10 +459,13 @@ async def detect_and_create_node_contradictions(
             logger.debug("No contradiction pairs detected")
             return []
         
-        # Step 2: Create contradiction edges using add_triplet
-        contradiction_edges = await create_contradiction_edges_from_pairs(
-            contradiction_pairs, episode, add_triplet_func, driver
+        # Step 2: Create contradiction edges for normal flow (with deduplication)
+        contradiction_nodes, contradiction_edges = await detect_node_contradictions_for_flow(
+            llm_client, episode, existing_nodes, previous_episodes, driver
         )
+        
+        # Return the edges for normal flow processing
+        return contradiction_edges
         
         logger.info(f"Successfully created {len(contradiction_edges)} contradiction edges")
         return contradiction_edges
@@ -470,6 +473,96 @@ async def detect_and_create_node_contradictions(
     except Exception as e:
         logger.error(f"Error in detect_and_create_node_contradictions: {str(e)}")
         return []
+
+
+async def detect_node_contradictions_for_flow(
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+    existing_nodes: List[EntityNode],
+    previous_episodes: Optional[List[EpisodicNode]] = None,
+    driver = None,
+) -> tuple[List[EntityNode], List[EntityEdge]]:
+    """
+    Detect contradictions and return nodes and edges for normal flow integration.
+    
+    This function detects contradictions and returns the data to be processed
+    through the normal node and edge flow, ensuring proper deduplication.
+    
+    Parameters
+    ----------
+    llm_client : LLMClient
+        The LLM client for generating responses
+    episode : EpisodicNode
+        Current episode being processed
+    existing_nodes : List[EntityNode]
+        Existing nodes in the graph to check against
+    previous_episodes : Optional[List[EpisodicNode]]
+        Previous episodes for context
+    driver : optional
+        Neo4j driver for checking existing relationships
+        
+    Returns
+    -------
+    tuple[List[EntityNode], List[EntityEdge]]
+        Tuple of (contradiction_nodes, contradiction_edges) to be added to normal flow
+    """
+    try:
+        # Step 1: Detect contradiction pairs as cognitive objects
+        contradiction_pairs = await detect_contradiction_pairs(
+            llm_client, episode, existing_nodes, previous_episodes
+        )
+        
+        if not contradiction_pairs:
+            logger.debug("No contradiction pairs detected")
+            return [], []
+        
+        # Step 2: Extract nodes and create edges for normal flow
+        contradiction_nodes = []
+        contradiction_edges = []
+        now = utc_now()
+        
+        for node1, node2, reason in contradiction_pairs:
+            try:
+                # Check if contradiction already exists between these nodes
+                if driver and await _contradiction_exists(driver, node1.uuid, node2.uuid):
+                    logger.info(f'Contradiction already exists between {node1.name} and {node2.name}, skipping creation')
+                    continue
+                
+                # Add nodes to the list (deduplication will be handled by normal flow)
+                if node1 not in contradiction_nodes:
+                    contradiction_nodes.append(node1)
+                if node2 not in contradiction_nodes:
+                    contradiction_nodes.append(node2)
+                
+                # Create contradiction edge for normal flow
+                contradiction_edge = EntityEdge(
+                    source_node_uuid=node1.uuid,
+                    target_node_uuid=node2.uuid,
+                    name='CONTRADICTS',
+                    group_id=episode.group_id,
+                    fact=f'{node1.name} contradicts {node2.name}: {reason}',
+                    episodes=[episode.uuid],
+                    created_at=now,
+                    valid_at=episode.valid_at,
+                    attributes={
+                        'contradiction_reason': reason,
+                        'detected_in_episode': episode.uuid,
+                        'type': 'contradiction',  # Add type for easier identification
+                    }
+                )
+                
+                contradiction_edges.append(contradiction_edge)
+                logger.debug(f'Prepared contradiction edge for normal flow: {node1.name} -> {node2.name}')
+                
+            except Exception as e:
+                logger.error(f"Error preparing contradiction data for {node1.name} and {node2.name}: {str(e)}")
+        
+        logger.info(f"Prepared {len(contradiction_nodes)} contradiction nodes and {len(contradiction_edges)} contradiction edges for normal flow")
+        return contradiction_nodes, contradiction_edges
+        
+    except Exception as e:
+        logger.error(f"Error in detect_node_contradictions_for_flow: {str(e)}")
+        return [], []
 
 
 # Legacy functions for backward compatibility (can be removed later)

@@ -59,7 +59,7 @@ from graphiti_core.helpers import (
 )
 from graphiti_core.driver.driver import GraphDriver
 
-from .contradictions.handler import detect_and_create_node_contradictions
+from .contradictions.handler import detect_node_contradictions_for_flow
 from .search.handler import contradiction_aware_search as _contradiction_aware_search, enhanced_contradiction_search as _enhanced_contradiction_search
 from .defaults.handler import apply_default_values_to_new_nodes, sanitize_node_attributes
 from .salience.manager import SalienceManager
@@ -434,46 +434,71 @@ class ExtendedGraphiti(Graphiti):
                         existing_nodes_for_reasoning, 'reasoning_usage', reference_time
                     )
                 
-                contradiction_edges_list = await self._detect_contradictions_for_nodes(
+                # Detect contradictions for normal flow integration
+                contradiction_nodes, contradiction_edges = await self._detect_contradictions_for_nodes(
                     hydrated_nodes, episode, previous_episodes
                 )
                 
-                if contradiction_edges_list:
-                    # Flatten the list of contradiction edges
-                    all_contradiction_edges = [
-                        edge for edges in contradiction_edges_list for edge in edges
-                    ]
+                # Integrate contradiction nodes with the normal flow for proper deduplication
+                if contradiction_nodes:
+                    logger.info(f"Integrating {len(contradiction_nodes)} contradiction nodes into normal flow")
                     
-                    # Add contradiction edges to entity edges
-                    entity_edges.extend(all_contradiction_edges)
+                    # Add contradiction nodes to the main nodes list and process them through normal resolution
                     
-                    # Apply salience for contradiction involvement (only to existing nodes)
-                    contradicting_node_uuids = set()
-                    contradicted_node_uuids = set()
+                    # Process contradiction nodes through the normal resolution flow
+                    resolved_contradiction_data = await resolve_extracted_nodes(
+                        self.clients,
+                        contradiction_nodes,  # Use as extracted nodes
+                        episode,
+                        previous_episodes,
+                        entity_types,
+                    )
                     
-                    for edge in all_contradiction_edges:
-                        contradicting_node_uuids.add(edge.source_node_uuid)
-                        contradicted_node_uuids.add(edge.target_node_uuid)
+                    resolved_contradiction_nodes, contradiction_uuid_map, contradiction_duplicates = resolved_contradiction_data
                     
-                    # Find the actual node objects and apply salience updates
-                    # (only to existing nodes that haven't already received duplicate_found updates)
-                    node_uuid_map = {node.uuid: node for node in hydrated_nodes}
-                    contradiction_nodes = []
+                    # Add resolved contradiction nodes to the main hydrated nodes list
+                    hydrated_nodes.extend(resolved_contradiction_nodes)
                     
-                    for uuid in contradicting_node_uuids.union(contradicted_node_uuids):
-                        if (uuid in node_uuid_map and 
-                            uuid not in duplicate_node_uuids and 
-                            uuid not in truly_new_node_uuids):  # Only existing nodes
-                            contradiction_nodes.append(node_uuid_map[uuid])
+                    # Update contradiction edges with resolved UUIDs
+                    for edge in contradiction_edges:
+                        # Update source and target UUIDs if they were remapped during resolution
+                        if edge.source_node_uuid in contradiction_uuid_map:
+                            edge.source_node_uuid = contradiction_uuid_map[edge.source_node_uuid]
+                        if edge.target_node_uuid in contradiction_uuid_map:
+                            edge.target_node_uuid = contradiction_uuid_map[edge.target_node_uuid]
                     
-                    if contradiction_nodes:
-                        await self.salience_manager.update_direct_salience(
-                            contradiction_nodes, 'contradiction_involvement', reference_time
-                        )
-                    
+                    logger.debug(f"Resolved {len(resolved_contradiction_nodes)} contradiction nodes through normal flow")
+                
+                # Add contradiction nodes and edges to the main entity_edges list
+                entity_edges.extend(contradiction_edges)
+                
+                # Apply salience for contradiction involvement (only to existing nodes)
+                contradicting_node_uuids = set()
+                contradicted_node_uuids = set()
+                
+                for edge in contradiction_edges:
+                    contradicting_node_uuids.add(edge.source_node_uuid)
+                    contradicted_node_uuids.add(edge.target_node_uuid)
+                
+                # Find the actual node objects and apply salience updates
+                # (only to existing nodes that haven't already received duplicate_found updates)
+                node_uuid_map = {node.uuid: node for node in hydrated_nodes}
+                contradiction_nodes_to_update = []
+                
+                for uuid in contradicting_node_uuids.union(contradicted_node_uuids):
+                    if (uuid in node_uuid_map and 
+                        uuid not in duplicate_node_uuids and 
+                        uuid not in truly_new_node_uuids):  # Only existing nodes
+                        contradiction_nodes_to_update.append(node_uuid_map[uuid])
+                
+                if contradiction_nodes_to_update:
+                    await self.salience_manager.update_direct_salience(
+                        contradiction_nodes_to_update, 'contradiction_involvement', reference_time
+                    )
+                
                     # Apply confidence penalties for contradicted nodes and boosts for contradicting nodes
                     contradiction_confidence_updates = []
-                    for edge in all_contradiction_edges:
+                    for edge in contradiction_edges:
                         # Apply penalty to contradicted node
                         contradicted_confidence = await self.confidence_manager.get_confidence(edge.target_node_uuid)
                         contradicting_confidence = await self.confidence_manager.get_confidence(edge.source_node_uuid)
@@ -511,17 +536,17 @@ class ExtendedGraphiti(Graphiti):
                     if contradiction_confidence_updates:
                         await self.confidence_manager.update_confidence_batch(contradiction_confidence_updates)
                 else:
-                    all_contradiction_edges = []
+                    contradiction_edges = []
                 
                 # Combine all contradiction edges (from node detection and edge invalidation)
-                all_contradiction_edges.extend(invalidation_contradiction_edges)
+                # all_contradiction_edges.extend(invalidation_contradiction_edges) # This line is no longer needed
                 
-                if all_contradiction_edges:
+                if contradiction_edges:
                     # Get unique contradicted and contradicting nodes for final result
                     final_contradicted_node_uuids = set()
                     final_contradicting_node_uuids = set()
                     
-                    for edge in all_contradiction_edges:
+                    for edge in contradiction_edges:
                         final_contradicting_node_uuids.add(edge.source_node_uuid)
                         final_contradicted_node_uuids.add(edge.target_node_uuid)
                     
@@ -538,7 +563,7 @@ class ExtendedGraphiti(Graphiti):
                     
                     contradiction_result = ContradictionDetectionResult(
                         contradictions_found=True,
-                        contradiction_edges=all_contradiction_edges,
+                        contradiction_edges=contradiction_edges,
                         contradicted_nodes=contradicted_nodes,
                         contradicting_nodes=contradicting_nodes,
                         contradiction_message=self._generate_contradiction_message(
@@ -591,9 +616,9 @@ class ExtendedGraphiti(Graphiti):
         nodes: list[EntityNode],
         episode: EpisodicNode,
         previous_episodes: list[EpisodicNode],
-    ) -> list[list[EntityEdge]]:
+    ) -> tuple[list[EntityNode], list[EntityEdge]]:
         """
-        Detect contradictions for a list of nodes using the new cognitive object approach.
+        Detect contradictions for a list of nodes and return data for normal flow integration.
         
         Parameters
         ----------
@@ -606,10 +631,10 @@ class ExtendedGraphiti(Graphiti):
             
         Returns
         -------
-        list[list[EntityEdge]]
-            List of contradiction edge lists for each node.
+        tuple[list[EntityNode], list[EntityEdge]]
+            Tuple of (contradiction_nodes, contradiction_edges) for normal flow integration
         """
-        from .contradictions.handler import detect_and_create_node_contradictions
+
         
         # Get all existing nodes in the group to check for contradictions
         search_query = """
@@ -667,20 +692,6 @@ class ExtendedGraphiti(Graphiti):
                     
                 except Exception as node_error:
                     logger.error(f"Error creating EntityNode from database record: {str(node_error)}")
-                    # Log only essential node data without embeddings to avoid clutter
-                    try:
-                        # Try to get data from the converted dictionary
-                        essential_data = {
-                            'uuid': node_data.get('uuid', 'unknown') if 'node_data' in locals() else 'unknown',
-                            'name': node_data.get('name', 'unknown') if 'node_data' in locals() else 'unknown',
-                            'labels': node_data.get('labels', []) if 'node_data' in locals() else list(neo4j_node.labels),
-                            'created_at': str(node_data.get('created_at', 'missing')) if 'node_data' in locals() else 'missing',
-                            'summary_length': len(str(node_data.get('summary', ''))) if 'node_data' in locals() else 0
-                        }
-                    except:
-                        # Fallback if we can't access the data
-                        essential_data = {'error': 'Could not extract node data'}
-                    logger.error(f"Essential node data: {essential_data}")
                     # Skip this node and continue with others
                     continue
             
@@ -693,33 +704,23 @@ class ExtendedGraphiti(Graphiti):
             
             if not filtered_existing_nodes:
                 logger.debug("No existing nodes to check for contradictions")
-                return [[] for _ in nodes]
+                return [], []
             
-            # Use the new contradiction detection system
-            # This will create cognitive objects and contradiction edges automatically
-            contradiction_edges = await detect_and_create_node_contradictions(
+            # Use the new contradiction detection system that returns data for normal flow
+            contradiction_nodes, contradiction_edges = await detect_node_contradictions_for_flow(
                 self.llm_client,
                 episode,
                 filtered_existing_nodes,
-                self.add_triplet,  # Pass add_triplet function
                 previous_episodes,
-                self.driver,  # Pass driver for duplicate checking
+                self.driver,
             )
             
-            # Return the edges in the expected format (list of lists)
-            # Since the new system works holistically, we return all edges for the first node
-            # and empty lists for the rest to maintain compatibility
-            if contradiction_edges:
-                result = [contradiction_edges] + [[] for _ in range(len(nodes) - 1)]
-            else:
-                result = [[] for _ in nodes]
-            
-            logger.info(f"Detected {len(contradiction_edges)} contradiction edges using new cognitive object approach")
-            return result
+            logger.info(f"Detected {len(contradiction_nodes)} contradiction nodes and {len(contradiction_edges)} contradiction edges for normal flow integration")
+            return contradiction_nodes, contradiction_edges
             
         except Exception as e:
             logger.error(f"Error in _detect_contradictions_for_nodes: {str(e)}")
-            return [[] for _ in nodes]
+            return [], []
 
     async def _create_contradiction_edges_from_invalidation(
         self,
