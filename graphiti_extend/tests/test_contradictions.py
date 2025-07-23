@@ -767,41 +767,20 @@ class TestContradictionSystem:
         
         existing_nodes = [love_node, hate_node]
         
-        # Mock LLM response detecting the same contradiction again
+        # Mock LLM response - should return empty since both nodes exist (filtered by prompt)
         mock_llm_client.generate_response.return_value = {
-            'contradiction_pairs': [
-                {
-                    'node1': {
-                        'name': 'I love football',
-                        'summary': 'User loves football',
-                        'entity_type': 'Entity'
-                    },
-                    'node2': {
-                        'name': 'I hate football now',
-                        'summary': 'User hates football now',
-                        'entity_type': 'Entity'
-                    },
-                    'contradiction_reason': 'User changed preference from loving to hating football'
-                }
-            ]
+            'contradiction_pairs': []
         }
         
-        # Mock driver that returns existing contradiction
-        mock_driver = AsyncMock()
-        mock_driver.execute_query.return_value = ([{"count": 1}], None, None)  # Contradiction exists
-        
-        # Test the detection with existing contradiction
+        # Test the detection - should return empty since prompt filters existing pairs
         result = await detect_and_create_node_contradictions(
-            mock_llm_client, episode, existing_nodes, mock_add_triplet, driver=mock_driver
+            mock_llm_client, episode, existing_nodes, mock_add_triplet
         )
         
-        # Should return empty list since contradiction already exists
+        # Should return empty list since prompt filtered out the pair (both nodes exist)
         assert result == []
         
-        # Verify driver was called to check for existing contradiction
-        mock_driver.execute_query.assert_called_once()
-        
-        # Verify add_triplet was NOT called since contradiction already exists
+        # Verify add_triplet was NOT called since no pairs were returned
         mock_add_triplet.assert_not_called()
 
     @pytest.mark.asyncio
@@ -830,7 +809,7 @@ class TestContradictionSystem:
         
         existing_nodes = [love_tennis_node]
         
-        # Mock LLM response detecting new contradiction
+        # Mock LLM response detecting new contradiction (only one node exists, other is new)
         mock_llm_client.generate_response.return_value = {
             'contradiction_pairs': [
                 {
@@ -849,13 +828,9 @@ class TestContradictionSystem:
             ]
         }
         
-        # Mock driver that returns no existing contradiction
-        mock_driver = AsyncMock()
-        mock_driver.execute_query.return_value = ([{"count": 0}], None, None)  # No contradiction exists
-        
-        # Test the detection with no existing contradiction
+        # Test the detection - should create contradiction since only one node exists
         result = await detect_and_create_node_contradictions(
-            mock_llm_client, episode, existing_nodes, mock_add_triplet, driver=mock_driver
+            mock_llm_client, episode, existing_nodes, mock_add_triplet
         )
         
         # Should create one contradiction edge
@@ -863,8 +838,5 @@ class TestContradictionSystem:
         edge = result[0]
         assert edge.name == 'CONTRADICTS'
         
-        # Verify driver was called to check for existing contradiction
-        mock_driver.execute_query.assert_called_once()
-        
         # Verify add_triplet was called to create new contradiction
-        mock_add_triplet.assert_called_once() 
+        mock_add_triplet.assert_called_once()

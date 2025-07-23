@@ -65,6 +65,11 @@ IMPORTANT RULES:
 - Create new nodes when needed to represent the contradictory concept properly
 - Focus on semantic contradictions AND factual corrections about the same entity/event
 
+CRITICAL FILTERING RULE:
+- If BOTH nodes in a potential contradiction pair already exist in the EXISTING NODES list, DO NOT return that pair
+- Only return pairs where at least ONE node needs to be created (i.e., at least one node is NEW)
+- This prevents duplicate contradiction edges between existing nodes that may already be connected
+
 EXAMPLES OF VALID CONTRADICTIONS:
 1. If someone says "I hate football" and previously said "I love football":
    - Node1: "love football" (summary: "User loves football")
@@ -120,9 +125,11 @@ Instructions:
 2. Check if existing nodes represent contradictory ideas
 3. LOOK FOR FACTUAL CORRECTIONS: Check if the user is correcting specific facts, numbers, prices, dates, or other concrete information
 4. Create new nodes when needed to represent contradictions properly
-5. Return pairs of cognitive objects that genuinely contradict each other
-6. Include both semantic contradictions AND factual corrections about the same entity/event
+5. APPLY FILTERING: If both nodes in a potential pair already exist in EXISTING NODES, skip that pair
+6. Return pairs of cognitive objects that genuinely contradict each other
+7. Include both semantic contradictions AND factual corrections about the same entity/event
 
+IMPORTANT: Only return pairs where at least ONE node needs to be created.
 Return contradiction pairs as cognitive objects with proper names and summaries.
 If no contradictions are found, return an empty list.
             """,
@@ -218,4 +225,4 @@ def get_contradiction_prompt(context: dict[str, Any]) -> list[Message]:
 versions = {
     'v1': get_contradiction_prompt,
     'pairs': get_contradiction_pairs_prompt
-} 
+}

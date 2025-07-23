@@ -555,7 +555,7 @@ const KnowledgeBaseManagement: React.FC = () => {
       setShowToast(true);
       
       const token = await get("token");
-      const response = await fetch(`${API_BASE_URL}/memory/memory/clear-neo4j`, {
+      const response = await fetch(`${API_BASE_URL}/memory/clear-neo4j`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
